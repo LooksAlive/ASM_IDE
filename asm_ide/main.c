@@ -68,62 +68,7 @@ GtkWidget* create_popover_menu(GtkTreeView *treeview) {
 
     return popover;
 }
-/*
-// Function to handle button press events
-gboolean on_treeview_button_pressed_event(GtkTreeView *tree_view, GtkTreePath *path, GtkTreeViewColumn *column, gpointer user_data) {
 
-    g_print("CLICKED\n");
-
-    if (TRUE) { //gtk_gesture_single_get_button(gesture) == GDK_BUTTON_SECONDARY
-        GtkWidget *popover = create_popover_menu(tree_view);
-
-        //gtk_popover_set_relative_to(GTK_POPOVER(popover), widget);
-        gtk_popover_popup(GTK_POPOVER(popover));
-        return GDK_EVENT_STOP;  // Event has been handled
-    }
-
-    return GDK_EVENT_PROPAGATE;  // Event has not been handled
-}
-*/
-/*
-static void on_treeview_button_pressed_event(GtkGestureClick *gesture,
-                                      int n_press,
-                                      double x,
-                                      double y,
-                                      gpointer user_data) {
-    if (gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture)) == GDK_BUTTON_SECONDARY) {
-        GtkTreeView *tree_view = GTK_TREE_VIEW(user_data);
-        GtkTreePath *path = NULL;
-        GtkTreeModel *model = NULL;
-        GtkTreeIter iter;
-
-        gtk_tree_view_convert_widget_to_tree_coords(tree_view, x, y, &x, &y);
-        if (gtk_tree_view_get_path_at_pos(tree_view, x, y, &path, NULL, NULL, NULL)) {
-            model = gtk_tree_view_get_model(tree_view);
-            if (gtk_tree_model_get_iter(model, &iter, path)) {
-                GMenu *menu = g_menu_new();
-                gtk_widget_set_parent(GTK_WIDGET(menu), GTK_WIDGET(tree_view));
-
-                // Create menu items
-                GMenuItem *menu_item = g_menu_item_new("Edit", "None description");
-                g_menu_append_item(menu, menu_item);
-                g_signal_connect(menu_item, "activate", G_CALLBACK(on_menu_edit_activate), model);
-
-                menu_item = g_menu_item_new("Delete", "None description");
-                g_menu_append_item(menu, menu_item);
-                g_signal_connect(menu_item, "activate", G_CALLBACK(on_menu_delete_activate), model);
-
-                gtk_widget_set_visible(GTK_WIDGET(menu), TRUE);
-
-                // Popup the menu at the pointer position
-                //gtk_menu_popup_at_pointer(GTK_MENU(menu), NULL);
-                //g_signal_connect(menu, "item-selected", G_CALLBACK(on_menu_item_selected), &iter);
-            }
-            gtk_tree_path_free(path);
-        }
-    }
-}
-*/
 
 static void on_row_activated(GtkTreeView *tree_view, GtkTreePath *path, GtkTreeViewColumn *column, gpointer user_data)
 {
@@ -144,11 +89,6 @@ static void on_row_activated(GtkTreeView *tree_view, GtkTreePath *path, GtkTreeV
         g_free(item_name);
     }
 }
-
-
-
-
-
 
 GtkWidget* create_right_panel() {
     GtkWidget *treeview;
@@ -338,288 +278,6 @@ static GtkWidget* create_registers_panel() {
 }
 
 /*
-static void on_row_selected(GtkTreeView *tree_view, GtkTreePath *path, GtkTreeViewColumn *column, gpointer user_data) {
-    GtkWidget *panel = GTK_WIDGET(user_data);
-
-    // Clear any existing child widgets
-    GList *children = gtk_container_get_children(GTK_CONTAINER(panel));
-    g_list_free_full(children, gtk_widget_destroy);
-
-    // Create instruction design panel and add to main panel
-    GtkWidget *instruction_panel = create_instruction_design_panel();
-    gtk_box_append(GTK_BOX(panel), instruction_panel);
-
-    gtk_widget_show_all(panel);
-}
-
-// Function to handle key press events (shortcuts)
-static gboolean on_key_press(GtkWidget *widget, GdkEventKey *event, gpointer user_data) {
-    static GtkTreeStore *store; // TODO.
-    // Check for shortcut keys
-    if (event->type == GDK_KEY_PRESS) {
-        if (event->keyval == GDK_KEY_Insert) {
-            // Handle Insert key (Create)
-            GtkTreeIter iter;
-            gtk_tree_store_append(store, &iter, NULL);
-            gtk_tree_store_set(store, &iter, 0, "New Address", 1, "New Opcode", 2, "New Operands", -1);
-        } else if (event->keyval == GDK_KEY_Delete) {
-            // Handle Delete key
-            GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(widget));
-            GtkTreeModel *model;
-            GtkTreeIter iter;
-            if (gtk_tree_selection_get_selected(selection, &model, &iter)) {
-                gtk_tree_store_remove(store, &iter);
-            }
-        } else if (event->keyval == GDK_KEY_s && (event->state & GDK_CONTROL_MASK)) {
-            // Handle Ctrl+S key (Save)
-            g_print("Ctrl+S pressed: Save\n");
-        }
-    }
-
-    // Propagate the event further
-    return FALSE;
-}
-*/
-
-/*
-GtkWidget* create_main_panel() {
-    GtkWidget *main_panel = gtk_grid_new();
-    gtk_widget_set_hexpand(main_panel, TRUE);
-    gtk_widget_set_vexpand(main_panel, TRUE);
-
-    GtkWidget *scrolled_window = gtk_scrolled_window_new();
-    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
-    gtk_widget_set_hexpand(scrolled_window, TRUE);
-    gtk_widget_set_vexpand(scrolled_window, TRUE);
-    gtk_grid_attach(GTK_GRID(main_panel), scrolled_window, 1, 0, 1, 1);
-
-    GtkWidget *tree_view = gtk_tree_view_new();
-    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled_window), tree_view);
-
-    GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
-    GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes("Address", renderer, "text", 0, NULL);
-    gtk_tree_view_append_column(GTK_TREE_VIEW(tree_view), column);
-
-    column = gtk_tree_view_column_new_with_attributes("Opcode", renderer, "text", 1, NULL);
-    gtk_tree_view_append_column(GTK_TREE_VIEW(tree_view), column);
-
-    column = gtk_tree_view_column_new_with_attributes("Operands", renderer, "text", 2, NULL);
-    gtk_tree_view_append_column(GTK_TREE_VIEW(tree_view), column);
-
-    GtkTreeStore *store = gtk_tree_store_new(3, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
-    gtk_tree_view_set_model(GTK_TREE_VIEW(tree_view), GTK_TREE_MODEL(store));
-
-    GtkTreeIter iter;
-    gtk_tree_store_append(store, &iter, NULL);
-    gtk_tree_store_set(store, &iter, 0, "0x0000", 1, "MOV", 2, "RAX, RBX", -1);
-
-    return main_panel;
-}
-
-
-static GtkWidget* create_instruction_design_panel() {
-    GtkWidget *panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-
-    // Address
-    GtkWidget *address_label = gtk_label_new("Address:");
-    gtk_box_append(GTK_BOX(panel), address_label);
-
-    GtkWidget *address_entry = gtk_entry_new();
-    gtk_entry_set_placeholder_text(GTK_ENTRY(address_entry), "Enter address");
-    gtk_box_append(GTK_BOX(panel), address_entry);
-
-    // Opcode
-    GtkWidget *opcode_label = gtk_label_new("Opcode:");
-    gtk_box_append(GTK_BOX(panel), opcode_label);
-
-    GtkWidget *opcode_combo = gtk_combo_box_text_new();
-    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(opcode_combo), NULL, "MOV");
-    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(opcode_combo), NULL, "ADD");
-    gtk_box_append(GTK_BOX(panel), opcode_combo);
-
-    // Operands
-    GtkWidget *operands_label = gtk_label_new("Operands:");
-    gtk_box_append(GTK_BOX(panel), operands_label);
-
-    GtkWidget *operands_entry = gtk_entry_new();
-    gtk_entry_set_placeholder_text(GTK_ENTRY(operands_entry), "Enter operands");
-    gtk_box_append(GTK_BOX(panel), operands_entry);
-
-    // Save and Delete buttons (optional)
-    GtkWidget *save_button = gtk_button_new_with_label("Save");
-    gtk_box_append(GTK_BOX(panel), save_button);
-
-    GtkWidget *delete_button = gtk_button_new_with_label("Delete");
-    gtk_box_append(GTK_BOX(panel), delete_button);
-
-    return panel;
-}
-*/
-
-
-
-/*
-typedef struct {
-    char *address;
-    char *opcode;
-    char *operands;
-} InstructionRow;
-
-
-// Function to add a new row to the list box
-void add_row_to_listbox(GtkWidget *list_box, InstructionRow *row) {
-    GtkWidget *row_widget = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-    gtk_list_box_insert(GTK_LIST_BOX(list_box), row_widget, -1);
-
-    // Address
-    GtkWidget *address_label = gtk_label_new(row->address);
-    gtk_box_append(GTK_BOX(row_widget), address_label);
-
-    // Opcode (ComboBoxText)
-    GtkWidget *opcode_combo = gtk_combo_box_text_new();
-    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(opcode_combo), NULL, "MOV");
-    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(opcode_combo), NULL, "ADD");
-    gtk_combo_box_set_active_id(GTK_COMBO_BOX_TEXT(opcode_combo), row->opcode);
-    gtk_box_append(GTK_BOX(row_widget), opcode_combo);
-
-    // Operands (Entry)
-    GtkWidget *operands_entry = gtk_entry_new();
-    gtk_entry_set_placeholder_text(GTK_ENTRY(operands_entry), row->operands);
-    gtk_box_append(GTK_BOX(row_widget), operands_entry);
-}
-
-// Callback function for adding a new row
-void on_add_row_clicked(GtkButton *button, gpointer user_data) {
-    static int row_count = 2;  // Start adding rows from row 2 (index 1)
-    GtkWidget *list_box = GTK_WIDGET(user_data);
-
-    InstructionRow new_row = {"0x0000", "MOV", "RAX, RBX"};
-    add_row_to_listbox(list_box, &new_row);
-
-    row_count++;
-}
-
-static GtkWidget* create_main_panel() {
-    GtkWidget *main_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    gtk_widget_set_hexpand(main_panel, TRUE);
-    gtk_widget_set_vexpand(main_panel, TRUE);
-
-    // Create scrolled window
-    GtkWidget *scrolled_window = gtk_scrolled_window_new();
-    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
-    gtk_widget_set_hexpand(scrolled_window, TRUE);
-    gtk_widget_set_vexpand(scrolled_window, TRUE);
-    gtk_box_append(GTK_BOX(main_panel), scrolled_window);
-
-    // Create a list box for the code display
-    GtkWidget *list_box = gtk_list_box_new();
-    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled_window), list_box);
-
-    // Add headers (optional)
-    GtkWidget *header_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    gtk_list_box_insert(GTK_LIST_BOX(list_box), header_row, -1);
-
-    GtkWidget *address_header = gtk_label_new("Address");
-    gtk_box_append(GTK_BOX(header_row), address_header);
-
-    GtkWidget *opcode_header = gtk_label_new("Opcode");
-    gtk_box_append(GTK_BOX(header_row), opcode_header);
-
-    GtkWidget *operands_header = gtk_label_new("Operands");
-    gtk_box_append(GTK_BOX(header_row), operands_header);
-
-    // Add an initial row (optional)
-    InstructionRow initial_row = {"0x0000", "MOV", "RAX, RBX"};
-    add_row_to_listbox(list_box, &initial_row);
-    add_row_to_listbox(list_box, &initial_row);
-    add_row_to_listbox(list_box, &initial_row);add_row_to_listbox(list_box, &initial_row);
-
-    // Button to add new rows
-    GtkWidget *add_button = gtk_button_new_with_label("Add Row");
-    g_signal_connect(add_button, "clicked", G_CALLBACK(on_add_row_clicked), list_box);
-    gtk_box_append(GTK_BOX(main_panel), add_button);
-
-    return main_panel;
-}
-*/
-
-
-/*
-static GtkWidget* create_main_panel() {
-    GtkWidget *main_panel = gtk_grid_new();
-    gtk_widget_set_hexpand(main_panel, TRUE);
-    gtk_widget_set_vexpand(main_panel, TRUE);
-
-    // Create scrolled window
-    GtkWidget *scrolled_window = gtk_scrolled_window_new();
-    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
-    gtk_widget_set_hexpand(scrolled_window, TRUE);
-    gtk_widget_set_vexpand(scrolled_window, TRUE);
-    gtk_grid_attach(GTK_GRID(main_panel), scrolled_window, 1, 0, 1, 1);
-
-    // Create tree view
-    GtkWidget *tree_view = gtk_tree_view_new();
-    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled_window), tree_view);
-
-    // Add columns to the tree view
-    GtkCellRenderer *renderer;
-    GtkTreeViewColumn *column;
-
-    // Column 1: Address
-    renderer = gtk_cell_renderer_text_new();
-    column = gtk_tree_view_column_new_with_attributes("Address", renderer, "text", 0, NULL);
-    gtk_tree_view_append_column(GTK_TREE_VIEW(tree_view), column);
-
-    // Column 2: Opcode (ComboBox)
-    GtkListStore *opcode_store = gtk_list_store_new(1, G_TYPE_STRING);
-    GtkTreeIter iter;
-    gtk_list_store_append(opcode_store, &iter);
-    gtk_list_store_set(opcode_store, &iter, 0, "MOV", -1);  // Sample instruction
-    gtk_list_store_append(opcode_store, &iter);
-    gtk_list_store_set(opcode_store, &iter, 0, "ADD", -1);  // Another sample instruction
-
-    renderer = gtk_cell_renderer_combo_new();
-    g_object_set(renderer, "editable", TRUE, "model", opcode_store, "text-column", 0, NULL);
-    column = gtk_tree_view_column_new_with_attributes("Opcode", renderer, "text", 1, NULL);
-    gtk_tree_view_append_column(GTK_TREE_VIEW(tree_view), column);
-
-    // Column 3: Operands (Text Entry)
-    renderer = gtk_cell_renderer_text_new();
-    column = gtk_tree_view_column_new_with_attributes("Operands", renderer, "text", 2, NULL);
-    gtk_tree_view_append_column(GTK_TREE_VIEW(tree_view), column);
-
-    // Create a tree store for the data model
-    GtkTreeStore *store = gtk_tree_store_new(3, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
-    gtk_tree_view_set_model(GTK_TREE_VIEW(tree_view), GTK_TREE_MODEL(store));
-
-    // Add an initial row (optional)
-    GtkTreeIter tree_iter;
-    gtk_tree_store_append(store, &tree_iter, NULL);
-    gtk_tree_store_set(store, &tree_iter, 0, "0x0000", 1, "MOV", 2, "RAX, RBX", -1);
-
-    // Allow adding new rows dynamically
-    // You can implement a button or menu action to trigger this
-
-    // Pack tree view into main panel
-    gtk_grid_attach(GTK_GRID(main_panel), tree_view, 0, 0, 1, 1);
-
-    return main_panel;
-}
-*/
-
-
-
-
-
-
-
-
-typedef struct {
-    GtkWidget *address_entry;
-    GtkWidget *opcode_entry;
-    GtkWidget *operands_box;
-} InstructionRowWidgets;
-
 // Function to add an operand entry to a row
 void add_operand_entry(GtkWidget *operands_box) {
     GtkWidget *operand_container = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
@@ -667,6 +325,100 @@ void add_row_to_listbox(GtkWidget *list_box) {
     g_signal_connect_swapped(add_operand_button, "clicked", G_CALLBACK(add_operand_entry), operands_box);
     gtk_box_append(GTK_BOX(row_widget), add_operand_button);
 }
+*/
+
+// Function to add an operand entry to a row
+void add_operand_entry(GtkWidget *operands_box) {
+    GtkWidget *operand_container = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_box_append(GTK_BOX(operands_box), operand_container);
+
+    GtkWidget *enum_combobox = gtk_combo_box_text_new();
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(enum_combobox), NULL, "NONE");
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(enum_combobox), NULL, "CONSTANT");
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(enum_combobox), NULL, "L_REG");
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(enum_combobox), NULL, "C_REG");
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(enum_combobox), NULL, "STRUCTOFFSET");
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(enum_combobox), NULL, "SIZEOF");
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(enum_combobox), NULL, "G_VAR");
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(enum_combobox), NULL, "L_VAR");
+    gtk_box_append(GTK_BOX(operand_container), enum_combobox);
+
+    GtkWidget *operand_entry = gtk_entry_new();
+    gtk_box_append(GTK_BOX(operand_container), operand_entry);
+
+    //GtkWidget *remove_operand_button = gtk_button_new_with_label("-");
+    //g_signal_connect_swapped(remove_operand_button, "clicked", G_CALLBACK(gtk_widget_unparent), operand_container);
+    //gtk_box_append(GTK_BOX(operand_container), remove_operand_button);
+}
+
+// Function to handle opcode selection change
+void on_opcode_changed(GtkComboBox *combo, gpointer operands_box) {
+    // Remove all children from operands_box
+    GtkWidget *child = gtk_widget_get_first_child(GTK_WIDGET(operands_box));
+    while (child != NULL) {
+        GtkWidget *next_child = gtk_widget_get_next_sibling(child);
+        gtk_widget_unparent(child);
+        child = next_child;
+    }
+
+    const gchar *selected_opcode = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(combo));
+    if (selected_opcode && g_strcmp0(selected_opcode, "None") != 0) {
+        if(g_strcmp0(selected_opcode, "MOV") == 0) {
+            add_operand_entry(GTK_WIDGET(operands_box));
+            add_operand_entry(GTK_WIDGET(operands_box));
+            add_operand_entry(GTK_WIDGET(operands_box));
+        }
+        else if(g_strcmp0(selected_opcode, "ADD") == 0) {
+            add_operand_entry(GTK_WIDGET(operands_box));
+            add_operand_entry(GTK_WIDGET(operands_box));
+        }
+
+        else {
+            for (int i = 0; i < 2; i++) {  // Assuming 2 operands for simplicity
+                add_operand_entry(GTK_WIDGET(operands_box));
+            }
+        }
+    }
+}
+
+// Function to add a new row to the list box
+void add_row_to_listbox(GtkWidget *list_box) {
+    GtkWidget *row_widget = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+
+    GtkListBoxRow *selected_row = gtk_list_box_get_selected_row(GTK_LIST_BOX(list_box));
+    if (selected_row) {
+        gtk_list_box_insert(GTK_LIST_BOX(list_box), row_widget, gtk_list_box_row_get_index(selected_row) + 1);
+    } else {
+        gtk_list_box_insert(GTK_LIST_BOX(list_box), row_widget, -1);
+    }
+
+    // Address (Label)
+    GtkWidget *address_label = gtk_label_new("0x0000");
+    gtk_box_append(GTK_BOX(row_widget), address_label);
+
+    // Opcode (ComboBox)
+    GtkWidget *opcode_combo = gtk_combo_box_text_new();
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(opcode_combo), NULL, "None");
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(opcode_combo), NULL, "MOV");
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(opcode_combo), NULL, "ADD");
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(opcode_combo), NULL, "SUB");
+    gtk_combo_box_set_active(GTK_COMBO_BOX(opcode_combo), 0);
+    gtk_box_append(GTK_BOX(row_widget), opcode_combo);
+
+    // Operands (Box)
+    GtkWidget *operands_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_box_append(GTK_BOX(row_widget), operands_box);
+
+    // Connect signal to handle opcode changes
+    g_signal_connect(opcode_combo, "changed", G_CALLBACK(on_opcode_changed), operands_box);
+
+    // Add Operand Button
+    //GtkWidget *add_operand_button = gtk_button_new_with_label("+");
+    //g_signal_connect_swapped(add_operand_button, "clicked", G_CALLBACK(add_operand_entry), operands_box);
+    //gtk_box_append(GTK_BOX(row_widget), add_operand_button);
+}
+
+
 
 // Callback function for adding a new row
 void on_add_row_clicked(GtkButton *button, gpointer user_data) {
@@ -699,7 +451,9 @@ static GtkWidget* create_main_panel() {
 
     // Create a list box for the code display
     GtkWidget *list_box = gtk_list_box_new();
+    gtk_list_box_set_selection_mode(GTK_LIST_BOX(list_box), GTK_SELECTION_SINGLE);
     gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled_window), list_box);
+
 
     // Add headers
     GtkWidget *header_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
@@ -757,6 +511,19 @@ gboolean on_key_press_event(GtkEventControllerKey *controller, guint keyval, gui
 }
 
 
+GtkWidget* create_operand_view_panel() {
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+
+    GtkWidget* bf = gtk_button_new_with_label("Remove Function");
+    GtkWidget* sf = gtk_button_new_with_label("Next Operand");
+    GtkWidget* vf = gtk_button_new_with_label("Previous Operand");
+    gtk_box_append(GTK_BOX(box), bf);
+    gtk_box_append(GTK_BOX(box), sf);
+    gtk_box_append(GTK_BOX(box), vf);
+
+    return box;
+}
+
 
 static void activate(GtkApplication* app, gpointer user_data) {
     GtkWidget *window = gtk_application_window_new(app);
@@ -772,8 +539,12 @@ static void activate(GtkApplication* app, gpointer user_data) {
     GtkWidget *info_panel = create_info_panel();
     gtk_grid_attach(GTK_GRID(grid), info_panel, 0, 1, 2, 1);
 
+    GtkWidget *b = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    GtkWidget *idesign_panel = create_operand_view_panel();
     GtkWidget *main_panel = create_main_panel();
-    gtk_grid_attach(GTK_GRID(grid), main_panel, 1, 2, 1, 1);
+    gtk_box_append(GTK_BOX(b), main_panel);
+    gtk_box_append(GTK_BOX(b), idesign_panel);
+    gtk_grid_attach(GTK_GRID(grid), b, 1, 2, 1, 1);
 
     GtkWidget* register_panel = create_registers_panel();
     gtk_grid_attach(GTK_GRID(grid), register_panel, 2, 2, 1, 1);
@@ -783,8 +554,7 @@ static void activate(GtkApplication* app, gpointer user_data) {
     g_signal_connect(controller, "key-pressed", G_CALLBACK(on_key_press_event), main_panel);
     gtk_widget_add_controller(window, controller);
 
-    //GtkWidget *idesign_panel = create_instruction_design_panel();
-    //gtk_grid_attach(GTK_GRID(grid), idesign_panel, 1, 3, 1, 1);
+    //gtk_grid_attach(GTK_GRID(grid), idesign_panel, 1, 1, 1, 1);
 
     GtkWidget *right_panel = create_right_panel();
     gtk_grid_attach(GTK_GRID(grid), right_panel, 0, 2, 1, 1);

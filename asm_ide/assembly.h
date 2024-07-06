@@ -1,8 +1,191 @@
 #ifndef ASSEMBLY_H
 #define ASSEMBLY_H
 
-#include <stdint.h>
-#include <stddef.h>
+#define _GNU_SOURCE
+
+#include <unistd.h>       // POSIX API: Standard symbolic constants and types
+#include <fcntl.h>        // POSIX API: File control options
+#include <sys/stat.h>     // POSIX API: File status
+#include <sys/types.h>    // POSIX API: Various types
+#include <sys/mman.h>     // POSIX API: Memory management declarations
+#include <sys/time.h>     // POSIX API: Time types
+#include <sys/resource.h> // POSIX API: Resource limits
+#include <sys/ioctl.h>    // POSIX API: I/O control operations
+#include <sys/socket.h>   // POSIX API: Socket interface
+#include <netinet/in.h>   // POSIX API: Internet address family
+#include <arpa/inet.h>    // POSIX API: Functions for manipulating IP addresses
+#include <errno.h>        // POSIX API: Error number symbols
+#include <sys/uio.h>      // POSIX API: I/O vector operations
+#include <signal.h>       // POSIX API: Signal handling
+#include <poll.h>         // POSIX API: Polling
+#include <sys/syscall.h>  // Linux syscall numbers
+#include <sys/wait.h>     // POSIX API: Process termination
+#include <sys/epoll.h>    // Linux API: Scalable I/O event notification
+#include <sys/fsuid.h>    // Linux API: Filesystem user and group ID manipulation
+#include <sys/select.h>   // POSIX API: Synchronous I/O multiplexing
+#include <sys/times.h>    // POSIX API: Times and clock operations
+#include <sys/utsname.h>  // POSIX API: Operating system name
+#include <sys/ptrace.h>   // Linux API: Process tracing
+#include <sys/user.h>     // Linux API: User-level API for manipulating process state
+#include <sys/vfs.h>      // Linux API: File system information
+#include <sys/quota.h>    // Linux API: Disk quota management
+#include <sys/xattr.h>    // Linux API: Extended attribute manipulation
+#include <sys/klog.h>     // Linux API: Kernel message logging
+#include <sys/sendfile.h> // Linux API: Efficient file data transfer
+#include <sys/signalfd.h> // Linux API: Signal file descriptor handling
+#include <sys/swap.h>     // Linux API: Swap space control
+#include <sys/eventfd.h>  // Linux API: Event file descriptor
+#include <sys/sysinfo.h>  // Linux API: System information
+//#include <sys/capability.h> // Linux API: Process capabilities
+//#include <sys/seccomp.h>  // Linux API: Secure computing mode
+#include <sys/io.h>       // Linux API: I/O port access
+#include <sys/ipc.h>      // POSIX API: Inter-process communication
+#include <sys/shm.h>      // POSIX API: Shared memory
+#include <sys/sem.h>      // POSIX API: Semaphores
+#include <sys/msg.h>      // POSIX API: Message queues
+#include <sys/utsname.h>  // POSIX API: Operating system information
+#include <netinet/ip.h>   // POSIX API: IP protocol family
+#include <netinet/tcp.h>  // POSIX API: TCP protocol family
+#include <netinet/udp.h>  // POSIX API: UDP protocol family
+#include <netinet/ether.h> // POSIX API: Ethernet protocol family
+#include <netinet/ip_icmp.h> // POSIX API: ICMP protocol family
+#include <netinet/icmp6.h> // POSIX API: ICMPv6 protocol family
+#include <net/if.h>       // POSIX API: Network interface
+#include <net/route.h>    // POSIX API: Network routing
+#include <netpacket/packet.h> // POSIX API: Packet interface
+#include <netdb.h>        // POSIX API: Network database operations
+#include <sys/un.h>       // POSIX API: UNIX domain sockets
+#include <dirent.h>       // POSIX API: Directory entries
+#include <limits.h>       // POSIX API: Implementation-defined constants
+#include <math.h>         // POSIX API: Mathematical functions
+#include <ctype.h>        // POSIX API: Character classification
+#include <locale.h>       // POSIX API: Localization utilities
+#include <wchar.h>        // POSIX API: Wide character handling
+#include <uchar.h>
+#include <wctype.h>       // POSIX API: Wide character classification
+#include <stddef.h>       // POSIX API: Standard definitions
+#include <stdint.h>       // POSIX API: Integer types
+#include <stdio.h>        // POSIX API: Standard I/O operations
+#include <stdlib.h>       // POSIX API: Standard library utilities
+#include <string.h>       // POSIX API: String operations
+#include <stdarg.h>       // POSIX API: Variable arguments
+#include <time.h>         // POSIX API: Time utilities
+#include <pthread.h>      // POSIX API: Threads
+#include <setjmp.h>
+#include <stdatomic.h>
+#include <threads.h>
+#include <iso646.h>
+#include <sched.h>
+
+// Additional headers for specific system calls
+//#include <sys/sysctl.h>   // sysctl system information interface
+#include <sys/prctl.h>    // prctl process control operations
+//#include <sys/fs/sysfs.h> // sysfs filesystem information
+#include <asm/ldt.h>      // modify_ldt modify local descriptor table
+#include <sys/mount.h>    // mount filesystem
+#include <sys/reboot.h>   // reboot system call
+#include <linux/module.h> // create_module and other module-related calls
+#include <sys/prctl.h>    // prctl process control operations
+#include <unistd.h>       // setresuid, setresgid, setgroups
+#include <sys/wait.h>     // waitpid, waitid, wait3, wait4
+#include <sys/time.h>     // gettimeofday, settimeofday
+#include <sys/utsname.h>  // uname, uname26
+#include <sys/ipc.h>      // IPC set, IPC get (all)
+#include <sys/msg.h>      // msgctl, msgget, msgsnd, msgrcv
+#include <sys/sem.h>      // semctl, semget, semop
+#include <sys/shm.h>      // shmctl, shmget, shmat, shmdt
+#include <sys/fsuid.h>    // setfsuid, setfsgid, setreuid, setresuid, setreuid32
+//#include <sys/capability.h> // capget, capset, capset32
+#include <sys/time.h>     // setitimer, getitimer, adjtimex, adjtimex_time32
+#include <sys/resource.h> // getrlimit, setrlimit, prlimit
+#include <sys/poll.h>     // poll, ppoll, epoll_create, epoll_ctl, epoll_wait
+#include <sys/fcntl.h>    // open, creat, fcntl, ioctl
+#include <sys/sysinfo.h>  // sysinfo, ustat, old_sysinfo
+#include <sys/ioctl.h>    // ioctl, ioctl_list, ioclt
+#include <sys/fcntl.h>    // fcntl, fcntl64, flock, lockf, lockf64
+
+#include <sys/socket.h>   // socket, bind, listen, accept, connect, recv, send, getsockname, getpeername, shutdown
+#include <netinet/in.h>   // sockaddr_in, IPPROTO_TCP, IPPROTO_UDP, INADDR_ANY, INADDR_LOOPBACK
+#include <arpa/inet.h>    // htons, htonl, ntohs, ntohl, inet_addr, inet_ntoa, inet_pton, inet_ntop
+#include <sys/epoll.h>    // epoll_create, epoll_ctl, epoll_wait
+//#include <sys/seccomp.h>  // seccomp, prctl(PR_SET_SECCOMP)
+#include <sys/io.h>       // ioperm, iopl, inb, inw, inl, outb, outw, outl
+#include <sys/prctl.h>    // prctl, PR_SET_NAME, PR_SET_PDEATHSIG, PR_GET_NAME, PR_GET_PDEATHSIG
+#include <sys/fsuid.h>    // setfsuid, setfsgid, setreuid, setresuid, setreuid32
+//#include <sys/capability.h> // capget, capset, capset32
+//#include <sys/ldt.h>      // modify_ldt, get_kernel_syms
+//#include <sys/sysctl.h>   // sysctl, sysctlbyname, sysctl
+#include <sys/sysinfo.h>  // sysinfo
+#include <sys/eventfd.h>  // eventfd, eventfd2
+#include <sys/signalfd.h> // signalfd, signalfd4
+#include <sys/utsname.h>  // uname, uname26
+#include <sys/syslog.h>   // syslog, openlog, closelog
+#include <sys/timex.h>    // adjtimex, ntp_adjtime
+#include <sys/unistd.h>   // sync, syncfs
+#include <sys/wait.h>     // waitpid, waitid, wait3, wait4
+#include <sys/time.h>     // gettimeofday, settimeofday
+#include <sys/ipc.h>      // IPC set, IPC get (all)
+#include <sys/msg.h>      // msgctl, msgget, msgsnd, msgrcv
+#include <sys/sem.h>      // semctl, semget, semop
+#include <sys/shm.h>      // shmctl, shmget, shmat, shmdt
+#include <sys/mount.h>    // mount, umount, umount2
+#include <sys/reboot.h>   // reboot
+#include <sys/mman.h>     // mmap, munmap, mprotect, msync
+#include <sys/resource.h> // getrlimit, setrlimit, prlimit
+#include <sys/poll.h>     // poll, ppoll
+#include <sys/fcntl.h>    // open, creat, fcntl, ioctl
+#include <sys/ioctl.h>    // ioctl, ioctl_list, ioclt
+//#include <sys/event.h>    // kqueue, kevent
+//#include <sys/disk.h>     // setdisk
+#include <sys/param.h>    // CPU_SETSIZE
+#include <sys/queue.h>    // LIST_HEAD
+#include <sys/user.h>     // getpwuid, getpwnam, getgrouplist
+
+//#include <sys/sysctl.h>   // sysctl system information interface
+#include <sys/prctl.h>    // prctl process control operations
+//#include <sys/fs/sysfs.h> // sysfs filesystem information
+#include <asm/ldt.h>      // modify_ldt modify local descriptor table
+#include <sys/mount.h>    // mount filesystem
+#include <sys/reboot.h>   // reboot system call
+#include <linux/module.h> // create_module and other module-related calls
+#include <sys/wait.h>     // waitpid, waitid, wait3, wait4
+#include <sys/time.h>     // gettimeofday, settimeofday
+#include <sys/utsname.h>  // uname, uname26
+#include <sys/ipc.h>      // IPC set, IPC get (all)
+#include <sys/msg.h>      // msgctl, msgget, msgsnd, msgrcv
+#include <sys/sem.h>      // semctl, semget, semop
+#include <sys/shm.h>      // shmctl, shmget, shmat, shmdt
+#include <sys/fsuid.h>    // setfsuid, setfsgid, setreuid, setresuid, setreuid32
+//#include <sys/capability.h> // capget, capset, capset32
+//#include <sys/ldt.h>      // modify_ldt, get_kernel_syms
+//#include <sys/sysctl.h>   // sysctl, sysctlbyname, sysctl
+#include <sys/sysinfo.h>  // sysinfo
+#include <sys/eventfd.h>  // eventfd, eventfd2
+#include <sys/signalfd.h> // signalfd, signalfd4
+#include <sys/utsname.h>  // uname, uname26
+#include <sys/syslog.h>   // syslog, openlog, closelog
+#include <sys/timex.h>    // adjtimex, ntp_adjtime
+#include <sys/unistd.h>   // sync, syncfs
+#include <sys/wait.h>     // waitpid, waitid, wait3, wait4
+#include <sys/time.h>     // gettimeofday, settimeofday
+#include <sys/ipc.h>      // IPC set, IPC get (all)
+#include <sys/msg.h>      // msgctl, msgget, msgsnd, msgrcv
+#include <sys/sem.h>      // semctl, semget, semop
+#include <sys/shm.h>      // shmctl, shmget, shmat, shmdt
+#include <sys/mount.h>    // mount, umount, umount2
+#include <sys/reboot.h>   // reboot
+#include <sys/mman.h>     // mmap, munmap, mprotect, msync
+#include <sys/resource.h> // getrlimit, setrlimit, prlimit
+#include <sys/poll.h>     // poll, ppoll
+#include <sys/fcntl.h>    // open, creat, fcntl, ioctl
+#include <sys/ioctl.h>    // ioctl, ioctl_list, ioclt
+//#include <sys/event.h>    // kqueue, kevent
+//#include <sys/disk.h>     // setdisk
+#include <sys/param.h>    // CPU_SETSIZE
+#include <sys/queue.h>    // LIST_HEAD
+#include <sys/user.h>     // getpwuid, getpwnam, getgrouplist
+
+
 
 
 typedef unsigned long long ull;
@@ -141,6 +324,7 @@ typedef enum SSEInstructions {
 
 
 typedef enum InstructionEnum {
+    SYSCALL,// system call: SYSCALL 15  --> constant --> any number represents standard system call
     MOV,    // Move data: MOV dest, src
     PUSH,   // Push data onto stack: PUSH src
     POP,    // Pop data from stack: POP dest
@@ -291,6 +475,14 @@ typedef struct Instruction {
 
 
 
+
+
+
+
+
+
+
+
 typedef enum BasicType {
     TYPE_INT,
     TYPE_FLOAT,
@@ -312,18 +504,13 @@ typedef struct local_register {
     ull value;
 } local_register;
 
-// Define a structure for a field in a struct
-typedef struct Field {
-    char* name;
-    BasicType type;
-    unsigned long long offset; // Offset from the start of the struct
-} Field;
-
 // Define a structure to represent a struct type
 typedef struct StructType {
+    ull offset; // actual offset on disk
     char* name;
-    Field* fields;
-    unsigned long long size; // Total size of the struct
+    struct Variable* fields;
+    size_t fields_size;
+    size_t struct_byte_size; // Total size of the struct
     unsigned int field_count;
 } StructType;
 
@@ -342,44 +529,42 @@ typedef union VariableValue {
     void* struct_val; // Pointer to struct data
 } VariableValue;
 
+typedef enum ObjectVisibility {
+    PRIVATE,
+    PUBLIC,     // by default
+    PROTECTED,
+
+} ObjectVisibility;
+
 // Define a structure to represent a variable
 typedef struct Variable {
+    ull offset; // actual offset on disk
     char* name;
-    BasicType type;
-    VariableValue value;
-    StructType* struct_type; // If the variable is of struct type
+    //VariableValue value;
+    ObjectVisibility visibility;
+    enum {
+        BACIS_TYPE_VARUALBE,
+        STRUCT_TYPE_VARIABLE
+    } vtype;
+    union {
+        BasicType type;
+        StructType* struct_type; // If the variable is of struct type
+    } data;
 } Variable;
-
-
-// Define a structure for function parameters
-typedef struct Parameter {
-    char* name;
-    BasicType type;
-    //unsigned long long offset; // Offset in the stack frame
-} Parameter;
-
-// Define a structure for local variables in a function
-typedef struct LocalVariable {
-    char* name;
-    BasicType type;
-    unsigned long long offset; // Offset in the stack frame
-} LocalVariable;
 
 // Define a structure to represent a function
 typedef struct Function {
-    ull offset;
-    char visible_globaly;
-    char* name;
-    Parameter* parameters;
+    ull offset; // actual offset on disk, start of a function def.
+    ull parent; // module or class
+    ObjectVisibility visibility;
+    char* name; // ends with \0
+    Variable* parameters;
     unsigned int param_count;
-    LocalVariable* local_variables;
-    unsigned int local_var_count;
-    char* bytecode;
-    unsigned long long bytecode_size;
+    char* bytecode;             // whole serialized bytecode
+    ull bytecode_size;
 
-    ull*    references;     // to calls
+    ull*    references;     // to calls, usages
     ull     ref_size;
-
 } Function;
 
 
@@ -395,20 +580,22 @@ typedef struct SizeofType {
 // push, pop  --> only optional not used very often
 //ull* stack_basic;
 //ull stack_size_basic;
+typedef enum NodeType {
+    L_REG,
+    C_VAR,
+
+    L_VAR,
+    G_VAR,
+    //FUNCTION,
+    CONSTANT,   // ull offset or just constant but of byte ull
+    STRUCTOFFSET,
+    SIZEOF,
+    DEREFERENCE, // [] taking waht is in address
+    NODE_TYPE_NONE
+} NodeType;
 
 typedef struct Node {
-    enum NodeType {
-        L_REG,
-        C_REG,
-        L_VAR,
-        G_VAR,
-        //FUNCTION,
-        ULLOFFSET,
-        STRUCTOFFSET,
-        SIZEOF,
-        DEREFERENCE, // [] taking waht is in address
-        NODE_TYPE_NONE
-    } type;
+    NodeType type;
 
     union {
         local_register  reg;
@@ -427,7 +614,7 @@ typedef struct DataMovement_s {
 
     Node src;
 
-    Node src_bytes_to_move;          // MOV L0, 5 L1     ---> 5 bytes, could also be an Node value (sizeof(xxx), structure offset)
+    Node src_bytes_to_move;          // MOV L0, L1, 5    ---> 5 bytes, could also be an Node value (sizeof(xxx), structure offset)
 } DataMovement_s;
 
 typedef struct Arithmetic_s {
@@ -444,26 +631,17 @@ typedef struct Logical_s {
 typedef struct call_stack {
     Function* function;
     Variable* variables;
-    local_register* c_registers;    // call passed registers
+    local_register* c_registers;    // call passed registers    // TODO: this Variable
     local_register* l_registers;    // local registers to this scope
 
 } call_stack;
 
-typedef struct ControlFlow_s {
-    enum {
-        JMPS,
-        CALLC
-    } type;
-
-    union {
-        Node operand;
-        call_stack call;
-    } data;
-} ControlFlow_s;
-
+// CMP
 typedef struct Comparison_s {
-    ControlFlow_s condition;
-    Node operand_jump;
+    Node operand_left;
+    Node operand_right;
+    InstructionEnum jump_instruction_type;  // JZ,JG,JL, ...
+    Node jump_position;
 } Comparison_s;
 
 
@@ -484,6 +662,10 @@ typedef struct stack {
 
 
 
+typedef struct Range {
+    ull start;
+    ull end;
+} Range;
 
 typedef struct Project {
     ull file_size;
@@ -498,15 +680,21 @@ typedef struct Project {
 
     char** files_functions;         // actual code
     size_t files_functions_size;
+    Function* files_functions_data;
 
 
     char* free_space_file;          // free ranges of bytes that can be filled for each group ^^^
+    Range* free_space_file_data;
 
     char* project_directory; // New member to store the project directory path
 
     stack project_stack;
 
 } Project;
+
+
+
+
 
 void init_project(Project* proj, const char* project_name);
 void clean_project(Project* proj);
@@ -517,11 +705,16 @@ void deserialize_project(Project* proj, const char* filename);
 void memory_read(stack* s, size_t src, void* buffer, size_t size);
 void memory_write(stack* s, size_t dest, void* src, size_t size);
 
+Function* deserialize_function(Project *p, ull offset);
+void serialize_function(Project *p, Function* fun);
+// function which take FILE* f suppose that position on disk is set to correct position/offset
+void serialize_variable(FILE *f, const Variable *var);
+Variable* deserialize_variable(FILE *f);
+void serialize_struct_type(FILE *f, const StructType *st);
+StructType* deserialize_struct_type(FILE *f);
+
 
 void interpret_Instruction(Project *p, Instruction* instr);
-
-
-
 
 
 
