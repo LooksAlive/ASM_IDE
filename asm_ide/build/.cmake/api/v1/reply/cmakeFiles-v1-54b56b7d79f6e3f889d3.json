@@ -5,12 +5,8 @@
 			"path" : "CMakeLists.txt"
 		},
 		{
-			"isExternal" : true,
-			"path" : "/usr/share/qtcreator/package-manager/auto-setup.cmake"
-		},
-		{
 			"isGenerated" : true,
-			"path" : "/home/adam/Desktop/ASM_IDE/build-asm_ide-Desktop-Debug/CMakeFiles/3.22.1/CMakeSystem.cmake"
+			"path" : "build/CMakeFiles/3.22.1/CMakeSystem.cmake"
 		},
 		{
 			"isCMake" : true,
@@ -19,7 +15,7 @@
 		},
 		{
 			"isGenerated" : true,
-			"path" : "/home/adam/Desktop/ASM_IDE/build-asm_ide-Desktop-Debug/CMakeFiles/3.22.1/CMakeCCompiler.cmake"
+			"path" : "build/CMakeFiles/3.22.1/CMakeCCompiler.cmake"
 		},
 		{
 			"isCMake" : true,
@@ -85,27 +81,12 @@
 			"isCMake" : true,
 			"isExternal" : true,
 			"path" : "/usr/share/cmake-3.22/Modules/CMakeCommonLanguageInclude.cmake"
-		},
-		{
-			"isCMake" : true,
-			"isExternal" : true,
-			"path" : "/usr/share/cmake-3.22/Modules/FindPkgConfig.cmake"
-		},
-		{
-			"isCMake" : true,
-			"isExternal" : true,
-			"path" : "/usr/share/cmake-3.22/Modules/FindPackageHandleStandardArgs.cmake"
-		},
-		{
-			"isCMake" : true,
-			"isExternal" : true,
-			"path" : "/usr/share/cmake-3.22/Modules/FindPackageMessage.cmake"
 		}
 	],
 	"kind" : "cmakeFiles",
 	"paths" : 
 	{
-		"build" : "/home/adam/Desktop/ASM_IDE/build-asm_ide-Desktop-Debug",
+		"build" : "/home/adam/Desktop/ASM_IDE/asm_ide/build",
 		"source" : "/home/adam/Desktop/ASM_IDE/asm_ide"
 	},
 	"version" : 

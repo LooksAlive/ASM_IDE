@@ -333,6 +333,7 @@ typedef enum InstructionEnum {
     ADD,    // Add: ADD dest, src
     SUB,    // Subtract: SUB dest, src
     MUL,    // Unsigned multiply: MUL src
+    MOD,    // Unsigned modulo: MOD src
     IMUL,   // Signed multiply: IMUL src
     DIV,    // Unsigned divide: DIV src
     IDIV,   // Signed divide: IDIV src
@@ -727,7 +728,6 @@ void serialize_variable(FILE *f, const Variable *var);
 Variable* deserialize_variable(FILE *f);
 void serialize_struct_type(FILE *f, const StructType *st);
 StructType* deserialize_struct_type(FILE *f);
-
 
 void interpret_Instruction(Project *p, Instruction* instr);
 

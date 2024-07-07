@@ -10,7 +10,9 @@
 	{
 		"commands" : 
 		[
-			"add_executable"
+			"add_executable",
+			"target_link_libraries",
+			"include_directories"
 		],
 		"files" : 
 		[
@@ -24,7 +26,19 @@
 			{
 				"command" : 0,
 				"file" : 0,
-				"line" : 41,
+				"line" : 42,
+				"parent" : 0
+			},
+			{
+				"command" : 1,
+				"file" : 0,
+				"line" : 45,
+				"parent" : 0
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 33,
 				"parent" : 0
 			}
 		]
@@ -36,6 +50,13 @@
 			[
 				{
 					"fragment" : "-g -O0 -g"
+				}
+			],
+			"includes" : 
+			[
+				{
+					"backtrace" : 3,
+					"path" : "/home/adam/Desktop/ASM_IDE/asm_ide/."
 				}
 			],
 			"language" : "C",
@@ -58,6 +79,11 @@
 			{
 				"fragment" : "",
 				"role" : "flags"
+			},
+			{
+				"backtrace" : 2,
+				"fragment" : "-lcurses",
+				"role" : "libraries"
 			}
 		],
 		"language" : "C"

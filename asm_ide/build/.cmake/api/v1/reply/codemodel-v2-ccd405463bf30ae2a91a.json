@@ -39,7 +39,7 @@
 				{
 					"directoryIndex" : 0,
 					"id" : "asm_ide::@6890427a1f51a3e7e1df",
-					"jsonFile" : "target-asm_ide-Debug-65349b3cb68d063722b8.json",
+					"jsonFile" : "target-asm_ide-Debug-ceda89dc59b97546c133.json",
 					"name" : "asm_ide",
 					"projectIndex" : 0
 				}
@@ -49,7 +49,7 @@
 	"kind" : "codemodel",
 	"paths" : 
 	{
-		"build" : "/home/adam/Desktop/ASM_IDE/build-asm_ide-Desktop-Debug",
+		"build" : "/home/adam/Desktop/ASM_IDE/asm_ide/build",
 		"source" : "/home/adam/Desktop/ASM_IDE/asm_ide"
 	},
 	"version" : 

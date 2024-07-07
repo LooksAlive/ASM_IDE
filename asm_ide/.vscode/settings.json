@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "assembly.h": "c",
+        "unistd.h": "c",
+        "ncurses.h": "c"
+    }
+}

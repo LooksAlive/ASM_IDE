@@ -30,6 +30,7 @@ set (SOURCES
 #include_directories(${GTK3_INCLUDE_DIRS})
 #link_directories(${GTK3_LIBRARY_DIRS})
 
+include_directories(.)
 #include_directories(/usr/include/gtk-4.0 /usr/include/glib-2.0 /usr/lib/x86_64-linux-gnu/glib-2.0/include /usr/include/cairo /usr/include/gtk-4.0/gdk /usr/include/pango-1.0 /usr/include/harfbuzz /usr/include/gdk-pixbuf-2.0 /usr/include/graphene-1.0 /usr/lib/x86_64-linux-gnu/graphene-1.0/include)
 
 #include_directories(cparser) #  cparser/include cparser/include/parser cparser/include/ast cparser/include/builtin cparser/include/helper
@@ -41,4 +42,4 @@ set (SOURCES
 add_executable(asm_ide ${SOURCES} ${CPARSER_INCLUDE} ${CPARSER_SRC})
 
 #target_link_libraries(asm_ide PkgConfig::GTK4 m gccjit) # ${GTK3_LIBRARIES} json-c
-target_link_libraries(asm_ide)
+target_link_libraries(asm_ide -lcurses)
