@@ -186,8 +186,6 @@
 #include <sys/user.h>     // getpwuid, getpwnam, getgrouplist
 
 
-
-
 typedef unsigned long long ull;
 
 // https://chromium.googlesource.com/chromiumos/docs/+/master/constants/syscalls.md#x86-32_bit
@@ -324,6 +322,7 @@ typedef enum SSEInstructions {
 
 
 typedef enum InstructionEnum {
+    NONE,
     SYSCALL,// system call: SYSCALL 15  --> constant --> any number represents standard system call
     MOV,    // Move data: MOV dest, src
     PUSH,   // Push data onto stack: PUSH src
@@ -460,8 +459,10 @@ typedef struct Instruction {
     */
 
     InstructionEnum i_type;
-
     void* data;
+
+    // not serializable !
+    ull instruction_start_offset;
 
 } Instruction;
 
@@ -507,6 +508,7 @@ typedef struct local_register {
 // Define a structure to represent a struct type
 typedef struct StructType {
     ull offset; // actual offset on disk
+    ull parent;
     char* name;
     struct Variable* fields;
     size_t fields_size;
@@ -539,6 +541,7 @@ typedef enum ObjectVisibility {
 // Define a structure to represent a variable
 typedef struct Variable {
     ull offset; // actual offset on disk
+    ull parent;
     char* name;
     //VariableValue value;
     ObjectVisibility visibility;
@@ -560,13 +563,21 @@ typedef struct Function {
     char* name; // ends with \0
     Variable* parameters;
     unsigned int param_count;
+    Instruction* instructions;
+    ull instructions_size;
     char* bytecode;             // whole serialized bytecode
     ull bytecode_size;
+
+    ull function_size;  // whole bytecode size
 
     ull*    references;     // to calls, usages
     ull     ref_size;
 } Function;
 
+void append_instruction(Function* func, const Instruction instr);
+void insert_instruction(Function* func, const Instruction instr, unsigned int index);
+void remove_instruction(Function* func, unsigned int index);
+void init_function(Function* func);
 
 
 typedef struct SizeofType {
@@ -678,13 +689,17 @@ typedef struct Project {
     char** files_bss_constants;     // constants, structures, variables, ...
     size_t files_bss_constants_size;
 
+
     char** files_functions;         // actual code
     size_t files_functions_size;
-    Function* files_functions_data;
+
+    Function* opened_functions;
+    size_t opened_functions_size;
 
 
     char* free_space_file;          // free ranges of bytes that can be filled for each group ^^^
     Range* free_space_file_data;
+    size_t free_space_file_size;
 
     char* project_directory; // New member to store the project directory path
 

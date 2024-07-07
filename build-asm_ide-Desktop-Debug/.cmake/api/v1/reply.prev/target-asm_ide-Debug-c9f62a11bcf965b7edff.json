@@ -26,19 +26,19 @@
 			{
 				"command" : 0,
 				"file" : 0,
-				"line" : 40,
+				"line" : 41,
 				"parent" : 0
 			},
 			{
 				"command" : 1,
 				"file" : 0,
-				"line" : 42,
+				"line" : 43,
 				"parent" : 0
 			},
 			{
 				"command" : 2,
 				"file" : 0,
-				"line" : 35,
+				"line" : 36,
 				"parent" : 0
 			}
 		]
@@ -164,7 +164,7 @@
 			"sourceIndexes" : 
 			[
 				0,
-				2
+				3
 			]
 		}
 	],
@@ -252,14 +252,15 @@
 			"sourceIndexes" : 
 			[
 				0,
-				2
+				3
 			]
 		},
 		{
 			"name" : "Header Files",
 			"sourceIndexes" : 
 			[
-				1
+				1,
+				2
 			]
 		}
 	],
@@ -274,6 +275,11 @@
 		{
 			"backtrace" : 1,
 			"path" : "assembly.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 1,
+			"path" : "gtk_gui.h",
 			"sourceGroupIndex" : 1
 		},
 		{

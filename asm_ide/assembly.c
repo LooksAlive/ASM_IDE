@@ -4,7 +4,7 @@
 // Initialize project
 void init_project(Project* proj, const char* project_name) {
     proj->file_size = 2 << 15;
-    proj->main_function = 1;
+    proj->main_function = 0;
     proj->files_data_dynamic = NULL;
     proj->files_data_dynamic_size = 1;
     proj->files_bss_constants = NULL;
@@ -272,7 +272,114 @@ void memory_write(stack* s, size_t dest, void* src, size_t size) {
 }
 
 
+ull getInstructionSize(const Instruction* instr) {
+    // Replace with actual logic to determine the size of an instruction
+    return sizeof(Instruction);
+}
 
+
+void append_instruction(Function* func, const Instruction instr) {
+    // Increment instructions size
+    func->instructions_size++;
+
+    // Allocate or reallocate memory for instructions
+    func->instructions = realloc(func->instructions, func->instructions_size * sizeof(Instruction));
+
+    // Check if reallocation failed
+    if (func->instructions == NULL) {
+        fprintf(stderr, "Failed to allocate memory for instructions.\n");
+        exit(EXIT_FAILURE);  // Or handle error as appropriate
+    }
+
+    // Append the new instruction to the end of the array
+    func->instructions[func->instructions_size - 1] = instr;
+}
+
+void adjust_addresses(Function* func, ull code_start_offset) {
+    ull* to_update[50]; char num_to_update = 0;
+
+    short isize = getInstructionSize(&func->instructions[0]);
+    func->instructions[0].instruction_start_offset = isize + code_start_offset;
+
+    for (unsigned int i = 1; i < func->instructions_size; ++i) {
+        Instruction* instr = &func->instructions[i];
+        if (instr->i_type == JMP) {
+            //JumpInstruction* jump_instr = (JumpInstruction*)instr->data;
+            // Adjust jump_instr->target_offset based on the new instruction offsets
+            // For example, if the target instruction is moved, update the target_offset accordingly
+        } else if (instr->i_type == CALL) {
+            //CallInstruction* call_instr = (CallInstruction*)instr->data;
+            // Adjust call_instr->call_address based on the new instruction offsets
+            // Similar logic to update the address
+        } else if (instr->i_type == CMP) {
+            //CallInstruction* call_instr = (CallInstruction*)instr->data;
+            // Adjust call_instr->call_address based on the new instruction offsets
+            // Similar logic to update the address
+        }
+
+        ull* to_update_[10]; char num_to_update_ = 0; int update_or_not = 1;
+        for(int y = 0; y < num_to_update; y++) {
+            if(*to_update[y] == func->instructions[i].instruction_start_offset) {
+                to_update_[num_to_update_] = to_update[y];
+                num_to_update_++;
+                update_or_not = 1;
+            }
+        }
+        if(update_or_not == 1) {
+            for(int y = 0; y < num_to_update_; y++) {
+                func->instructions[i].instruction_start_offset = func->instructions[i - 1].instruction_start_offset + getInstructionSize(&func->instructions[i - 1]);
+                *to_update_[y] = func->instructions[i].instruction_start_offset;
+            }
+        }
+        else {
+            // regular instruction
+            func->instructions[i].instruction_start_offset = func->instructions[i - 1].instruction_start_offset + getInstructionSize(&func->instructions[i - 1]);
+        }
+    }
+}
+
+void insert_instruction(Function* func, const Instruction instr, unsigned int index) {
+    if (index > func->instructions_size) {
+        fprintf(stderr, "Index out of bounds for inserting instruction.\n");
+        return;
+    }
+
+    func->instructions_size++;
+    func->instructions = realloc(func->instructions, func->instructions_size * sizeof(Instruction));
+
+    if (func->instructions == NULL) {
+        fprintf(stderr, "Failed to allocate memory for instructions.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    memmove(&func->instructions[index + 1], &func->instructions[index],
+            (func->instructions_size - index - 1) * sizeof(Instruction));
+
+    func->instructions[index] = instr;
+
+    adjust_addresses(func, 100);    // TODO: ...
+}
+
+void remove_instruction(Function* func, unsigned int index) {
+    if (index >= func->instructions_size) {
+        fprintf(stderr, "Error: Invalid index to remove instruction: %u\n", index);
+        return;
+    }
+
+    for (unsigned int i = index; i < func->instructions_size - 1; ++i) {
+        func->instructions[i] = func->instructions[i + 1];
+    }
+
+    func->instructions_size--;
+    func->instructions = realloc(func->instructions, func->instructions_size * sizeof(Instruction));
+
+    if (func->instructions == NULL && func->instructions_size > 0) {
+        fprintf(stderr, "Error: Failed to reallocate memory for instructions.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    adjust_addresses(func, 100);
+}
 
 
 
@@ -293,6 +400,8 @@ void init_function(Function* func) {
     func->bytecode_size = 0;
     func->references = NULL;
     func->ref_size = 0;
+    func->instructions = NULL;
+    func->instructions_size = 0;
 }
 
 // Serialization function for Instruction
@@ -738,78 +847,6 @@ Comparison_s* deserialize_Comparison(const unsigned char* buffer) {
     return comparison;
 }
 
-
-
-void serialize_function(Project *p, Function* fun) {
-    char* function_file = p->files_functions[0]; // Assuming single file for simplicity
-    FILE* f = fopen(function_file, "r+b");
-
-    if (!f) {
-        perror("Failed to open file");
-        return;
-    }
-
-    fseek(f, fun->offset, SEEK_SET);
-
-    fwrite(&fun->offset, sizeof(ull), 1, f);
-    fwrite(&fun->parent, sizeof(ull), 1, f);
-    fwrite(&fun->visibility, sizeof(ObjectVisibility), 1, f);
-
-    size_t name_len = strlen(fun->name);
-    fwrite(&name_len, sizeof(size_t), 1, f);
-    fwrite(fun->name, sizeof(char), name_len, f);
-
-    fwrite(&fun->param_count, sizeof(unsigned int), 1, f);
-    fwrite(fun->parameters, sizeof(Variable), fun->param_count, f);
-
-    fwrite(&fun->bytecode_size, sizeof(ull), 1, f);
-    fwrite(fun->bytecode, sizeof(char), fun->bytecode_size, f);
-
-    fwrite(&fun->ref_size, sizeof(ull), 1, f);
-    fwrite(fun->references, sizeof(ull), fun->ref_size, f);
-
-    fclose(f);
-}
-
-Function* deserialize_function(Project *p, ull offset) {
-    Function* fun = malloc(sizeof(Function));
-    char* function_file = p->files_functions[0]; // Assuming single file for simplicity
-    FILE* f = fopen(function_file, "rb");
-
-    if (!f) {
-        perror("Failed to open file");
-        free(fun);
-        return NULL;
-    }
-
-    fseek(f, offset, SEEK_SET);
-
-    fread(&fun->offset, sizeof(ull), 1, f);
-    fread(&fun->parent, sizeof(ull), 1, f);
-    fread(&fun->visibility, sizeof(ObjectVisibility), 1, f);
-
-    size_t name_len;
-    fread(&name_len, sizeof(size_t), 1, f);
-    fun->name = malloc(name_len + 1);
-    fread(fun->name, sizeof(char), name_len, f);
-    fun->name[name_len] = '\0';
-
-    fread(&fun->param_count, sizeof(unsigned int), 1, f);
-    fun->parameters = malloc(fun->param_count * sizeof(Variable));
-    fread(fun->parameters, sizeof(Variable), fun->param_count, f);
-
-    fread(&fun->bytecode_size, sizeof(ull), 1, f);
-    fun->bytecode = malloc(fun->bytecode_size);
-    fread(fun->bytecode, sizeof(char), fun->bytecode_size, f);
-
-    fread(&fun->ref_size, sizeof(ull), 1, f);
-    fun->references = malloc(fun->ref_size * sizeof(ull));
-    fread(fun->references, sizeof(ull), fun->ref_size, f);
-
-    fclose(f);
-    return fun;
-}
-
 void serialize_struct_type(FILE *f, const StructType *st) {
     fwrite(&st->offset, sizeof(ull), 1, f);
 
@@ -896,9 +933,78 @@ Variable* deserialize_variable(FILE *f) {
 
 
 
+void serialize_function(Project *p, Function* fun) {
+    char* function_file = p->files_functions[0]; // Assuming single file for simplicity
+    FILE* f = fopen(function_file, "r+b");
 
+    if (!f) {
+        perror("Failed to open file");
+        return;
+    }
+
+    fseek(f, fun->offset, SEEK_SET);
+
+    fwrite(&fun->offset, sizeof(ull), 1, f);
+    fwrite(&fun->parent, sizeof(ull), 1, f);
+    fwrite(&fun->visibility, sizeof(ObjectVisibility), 1, f);
+
+    size_t name_len = strlen(fun->name);
+    fwrite(&name_len, sizeof(size_t), 1, f);
+    fwrite(fun->name, sizeof(char), name_len, f);
+
+    fwrite(&fun->param_count, sizeof(unsigned int), 1, f);
+    fwrite(fun->parameters, sizeof(Variable), fun->param_count, f);
+
+    fwrite(&fun->bytecode_size, sizeof(ull), 1, f);
+    fwrite(fun->bytecode, sizeof(char), fun->bytecode_size, f);
+
+    fwrite(&fun->ref_size, sizeof(ull), 1, f);
+    fwrite(fun->references, sizeof(ull), fun->ref_size, f);
+
+    fclose(f);
+}
+
+Function* deserialize_function(Project *p, ull offset) {
+    Function* fun = malloc(sizeof(Function));
+    char* function_file = p->files_functions[0]; // Assuming single file for simplicity
+    FILE* f = fopen(function_file, "rb");
+
+    if (!f) {
+        perror("Failed to open file");
+        free(fun);
+        return NULL;
+    }
+
+    fseek(f, offset, SEEK_SET);
+
+    fread(&fun->offset, sizeof(ull), 1, f);
+    fread(&fun->parent, sizeof(ull), 1, f);
+    fread(&fun->visibility, sizeof(ObjectVisibility), 1, f);
+
+    size_t name_len;
+    fread(&name_len, sizeof(size_t), 1, f);
+    fun->name = malloc(name_len + 1);
+    fread(fun->name, sizeof(char), name_len, f);
+    fun->name[name_len] = '\0';
+
+    fread(&fun->param_count, sizeof(unsigned int), 1, f);
+    fun->parameters = malloc(fun->param_count * sizeof(Variable));
+    fread(fun->parameters, sizeof(Variable), fun->param_count, f);
+
+    fread(&fun->bytecode_size, sizeof(ull), 1, f);
+    fun->bytecode = malloc(fun->bytecode_size);
+    fread(fun->bytecode, sizeof(char), fun->bytecode_size, f);
+
+    fread(&fun->ref_size, sizeof(ull), 1, f);
+    fun->references = malloc(fun->ref_size * sizeof(ull));
+    fread(fun->references, sizeof(ull), fun->ref_size, f);
+
+    fclose(f);
+    return fun;
+}
+/*
 // it is seuqnce of bytes always, so we need to update whole function
-void update_function(const Function* function_old, const Function* function_new) {
+void update_function(Project *p, const Function* function_old, const Function* function_new) {
     size_t old_size = sizeof(ull) * 2 + sizeof(ObjectVisibility) + sizeof(size_t) + strlen(function_old->name) +
             sizeof(unsigned int) + sizeof(Variable) * function_old->param_count +
             sizeof(ull) + function_old->bytecode_size + sizeof(ull) * function_old->ref_size;
@@ -909,7 +1015,7 @@ void update_function(const Function* function_old, const Function* function_new)
 
     if (new_size <= old_size) {
         // Rewrite existing function, pad the rest with zeros
-        deserialize_function(NULL, (Function*)function_new);
+        deserialize_function(p, (Function*)function_new);
         FILE* f = fopen(function_new->name, "r+b");
         fseek(f, function_new->offset + new_size, SEEK_SET);
         for (size_t i = new_size; i < old_size; ++i) {
@@ -922,7 +1028,7 @@ void update_function(const Function* function_old, const Function* function_new)
         fprintf(stderr, "Error: new function size exceeds old function size, relocation not implemented.\n");
     }
 }
-
+*/
 
 
 void handle_MOV(Project *p, Instruction* instr) {
@@ -973,8 +1079,6 @@ void handle_CMP(Project *p, Instruction* instr) {
     case JNC:
     case JNZ:
     case JZ:
-
-
         p->project_stack.stack_pointer = ((Node*)instr->data)->data.offset;
         break;
     }
@@ -982,42 +1086,6 @@ void handle_CMP(Project *p, Instruction* instr) {
 
 
 
-
-
-
-#define STACK_SIZE 1024
-
-// Define the stack structure
-typedef struct stackc {
-    int top;
-    void* items[STACK_SIZE];
-} stackc;
-
-// Initialize the stack
-void init_stack(stackc* s) {
-    s->top = -1;
-}
-
-// Push an item onto the stack
-void push(stackc* s, void* item) {
-    if (s->top < STACK_SIZE - 1) {
-        s->items[++s->top] = item;
-    } else {
-        printf("Stack overflow\n");
-    }
-}
-
-// Pop an item from the stack
-void* pop(stackc* s) {
-    if (s->top >= 0) {
-        return s->items[s->top--];
-    } else {
-        printf("Stack underflow\n");
-        return NULL;
-    }
-}
-
-// Function to execute system calls
 
 
 
@@ -1060,6 +1128,66 @@ void interpret_Instruction(Project *p, Instruction* instr) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#define STACK_SIZE 1024
+
+// Define the stack structure
+typedef struct stackc {
+    int top;
+    void* items[STACK_SIZE];
+} stackc;
+
+// Initialize the stack
+void init_stack(stackc* s) {
+    s->top = -1;
+}
+
+// Push an item onto the stack
+void push(stackc* s, void* item) {
+    if (s->top < STACK_SIZE - 1) {
+        s->items[++s->top] = item;
+    } else {
+        printf("Stack overflow\n");
+    }
+}
+
+// Pop an item from the stack
+void* pop(stackc* s) {
+    if (s->top >= 0) {
+        return s->items[s->top--];
+    } else {
+        printf("Stack underflow\n");
+        return NULL;
+    }
+}
+
+// Function to execute system calls
 
 
 // Function to execute system calls
