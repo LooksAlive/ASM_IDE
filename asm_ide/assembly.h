@@ -481,22 +481,45 @@ typedef struct Instruction {
 
 
 
+typedef enum ObjectEnum {
+    OBJ_NONE,
+    OBJ_OFFSET,
+    OBJ_FUNCTION,
+    OBJ_VARIABLE,
+    OBJ_STRUCT,
+    //OBJ_STRING,
+    //OBJ_ARRAY,
+    OBJ_ENUM,
+    OBJ_MODULE,
+} ObjectEnum;
 
-
-
+typedef struct Object {
+    ObjectEnum type;
+    union object {
+        ull offset;
+        struct Function* function;
+        struct Variable* variable;
+        struct StructType* struct_type;
+        struct EnumType* enum_type;
+        struct Module* module;
+        //String* string;
+        //Array* array;
+    } object;
+} Object;
 
 typedef enum BasicType {
-    TYPE_INT,
-    TYPE_FLOAT,
-    TYPE_DOUBLE,
-    TYPE_CHAR,
-    TYPE_LONG,
-    TYPE_SHORT,
-    TYPE_UNSIGNED_INT,
-    TYPE_UNSIGNED_LONG,
-    TYPE_UNSIGNED_CHAR,
-    TYPE_POINTER,
-    TYPE_STRUCT
+    BASIC_TYPE_INT,
+    BASIC_TYPE_FLOAT,
+    BASIC_TYPE_DOUBLE,
+    BASIC_TYPE_CHAR,
+    BASIC_TYPELONG,
+    BASIC_TYPE_SHORT,
+    BASIC_TYPE_UNSIGNED_INT,
+    BASIC_TYPE_UNSIGNED_LONG,
+    BASIC_TYPE_UNSIGNED_CHAR,
+    BASIC_TYPE_POINTER,
+    BASIC_TYPE_STRUCT,
+    BASIC_TYPE_LONG
 } BasicType;
 
 
@@ -506,16 +529,65 @@ typedef struct local_register {
     ull value;
 } local_register;
 
+
+// module type, similar to class but only encapsulates objects
+typedef struct Module {
+    ObjectEnum obj_type;
+    ull offset; // actual offset on disk
+    Object parent;
+    char* name;
+    Object* fields; // mostly Variable*  TODO: * or **
+    size_t fields_size;
+} Module;
+
+
 // Define a structure to represent a struct type
 typedef struct StructType {
+    ObjectEnum obj_type;
     ull offset; // actual offset on disk
-    ull parent;
+    Object parent;
     char* name;
-    struct Variable* fields;
+    Object* fields; // mostly Variable*  TODO: * or **
     size_t fields_size;
     size_t struct_byte_size; // Total size of the struct
     unsigned int field_count;
+
+    // references ull to child offsets variables
+    Object* references_children;
+    size_t references_children_size;
+
+    // other objects connected to this struct/class
+    Object* references_objects;
+    size_t references_objects_size;
+
+    // references ull to child offsets to structs/classes that this one inherits from
+    Object* references_parents;
+    size_t references_parents_size;
+
+    // references ull to child offsets to structs/classes that this inherits this one
+    Object* references_children_parents;
+    size_t references_children_parents_size;
+
+
 } StructType;
+
+// structure that will represent enum
+typedef struct EnumType {
+    ObjectEnum obj_type;
+    ull offset; // actual offset on disk
+    Object parent;
+    char* name;
+    Object* values; // Variable*  TODO: * or **
+    size_t values_size;
+    size_t enum_byte_size; // Total size of the enum
+
+    // references ull to child offsets variables
+    Object* references_children;
+    size_t references_size;
+
+} EnumType;
+
+
 
 // Define a union to represent the value of a variable
 typedef union VariableValue {
@@ -541,28 +613,38 @@ typedef enum ObjectVisibility {
 
 // Define a structure to represent a variable
 typedef struct Variable {
+    ObjectEnum obj_type;
     ull offset; // actual offset on disk
-    ull parent;
+    Object parent;
     char* name;
+    char is_constant;
     //VariableValue value;
     ObjectVisibility visibility;
     enum {
-        BACIS_TYPE_VARUALBE,
+        BASIC_TYPE_VARIABLE,
         STRUCT_TYPE_VARIABLE
     } vtype;
     union {
         BasicType type;
         StructType* struct_type; // If the variable is of struct type
     } data;
+
+    VariableValue value;
+
+
+    // references ull to child offsets variables
+    Object* references;
+    size_t references_size;
 } Variable;
 
 // Define a structure to represent a function
 typedef struct Function {
+    ObjectEnum obj_type;
     ull offset; // actual offset on disk, start of a function def.
-    ull parent; // module or class
+    Object parent; // module or class
     ObjectVisibility visibility;
     char* name; // ends with \0
-    Variable* parameters;
+    Object* parameters; // Variable*  TODO: * or **
     unsigned int param_count;
     Instruction* instructions;
     ull instructions_size;
@@ -571,8 +653,8 @@ typedef struct Function {
 
     ull function_size;  // whole bytecode size
 
-    ull*    references;     // to calls, usages
-    ull     ref_size;
+    Object  references;     // to calls, usages
+    ull     references_size;
 } Function;
 
 void append_instruction(Function* func, const Instruction instr);
@@ -580,11 +662,10 @@ void insert_instruction(Function* func, const Instruction instr, unsigned int in
 void remove_instruction(Function* func, unsigned int index);
 void init_function(Function* func);
 
-
 typedef struct SizeofType {
-    char isBasic;
-    BasicType type;
-    ull structure_access[5];
+    char isBasic;   // if true use type
+    BasicType basic_type;
+    Object structure_access;   // element access -> variable, with parent we can get to the struct
 } SizeofType;
 
 
@@ -602,7 +683,8 @@ typedef enum NodeType {
     CONSTANT,   // ull offset or just constant but of byte ull
     STRUCTOFFSET,
     SIZEOF,
-    DEREFERENCE, // [] taking waht is in address
+    DEREFERENCE, // [] taking waht is in address,
+    INSTRUCTION,    // in case of return from CMP for example. simplification.
     NODE_TYPE_NONE
 } NodeType;
 
@@ -615,7 +697,7 @@ typedef struct Node {
         //Function        fun;
         ull             offset;
         SizeofType      sizeof_;
-        ull structure_access[5];
+        ull structure_access;   // element access -> variable, with parent we can get to the struct;
 
     } data;
 } Node;
@@ -684,18 +766,13 @@ typedef struct Project {
 
     ull main_function;
 
-    char** files_data_dynamic;      // variables
-    size_t files_data_dynamic_size;
+    char** files_paths;      // all data in binary
+    size_t files_paths_size;
 
-    char** files_bss_constants;     // constants, structures, variables, ...
-    size_t files_bss_constants_size;
+    ull last_offset;    // offset at which we should append next data.
 
-
-    char** files_functions;         // actual code
-    size_t files_functions_size;
-
-    Function* opened_functions;
-    size_t opened_functions_size;
+    Object** opened_objects;
+    size_t opened_objects_size;
 
 
     char* free_space_file;          // free ranges of bytes that can be filled for each group ^^^
@@ -722,7 +799,7 @@ void memory_read(stack* s, size_t src, void* buffer, size_t size);
 void memory_write(stack* s, size_t dest, void* src, size_t size);
 
 Function* deserialize_function(Project *p, ull offset);
-void serialize_function(Project *p, Function* fun);
+void serialize_function(Project *p, Function* fun, const char* file_path);
 // function which take FILE* f suppose that position on disk is set to correct position/offset
 void serialize_variable(FILE *f, const Variable *var);
 Variable* deserialize_variable(FILE *f);
@@ -731,6 +808,13 @@ StructType* deserialize_struct_type(FILE *f);
 
 void interpret_Instruction(Project *p, Instruction* instr);
 
+
+
+
+
+
+
+Function* create_function(Project* p, const char* name);
 
 
 #endif // ASSEMBLY_H

@@ -5,13 +5,12 @@
 void init_project(Project* proj, const char* project_name) {
     proj->file_size = 2 << 15;
     proj->main_function = 0;
-    proj->files_data_dynamic = NULL;
-    proj->files_data_dynamic_size = 1;
-    proj->files_bss_constants = NULL;
-    proj->files_bss_constants_size = 1;
-    proj->files_functions = NULL;
-    proj->files_functions_size = 1;
+    proj->files_paths = NULL;
+    proj->files_paths_size = 1;
     proj->free_space_file = NULL;
+    proj->free_space_file_data = NULL;
+    proj->free_space_file_size = 1;
+    proj->last_offset = 1;
 
     proj->project_stack.globals = NULL;
     proj->project_stack.frames = NULL;
@@ -24,48 +23,30 @@ void init_project(Project* proj, const char* project_name) {
 
     if (mkdir(proj->project_directory, 0755) != 0) {
         perror("Error creating project directory");
-        free(proj->project_directory);
-        return;
+        //free(proj->project_directory);
+        //return;
     }
 
     FILE* file;
     char filepath[256];
 
     // File for data_dynamic
-    snprintf(filepath, sizeof(filepath), "%s/data_dynamic.bin", proj->project_directory);
+    snprintf(filepath, sizeof(filepath), "%s/files_paths.bin", proj->project_directory);
     file = fopen(filepath, "wb");
     if (file != NULL) {
-        proj->files_data_dynamic = malloc(sizeof(char*));
-        proj->files_data_dynamic[0] = malloc(strlen(filepath) + 1);
-        strcpy(proj->files_data_dynamic[0], filepath);
+        proj->files_paths = malloc(sizeof(char*));
+        proj->files_paths[0] = malloc(strlen(filepath) + 1);
+        strcpy(proj->files_paths[0], filepath);
+        // write single zero byte to start indicating that we should move to offset=1
+        char* data = calloc(proj->file_size, sizeof(char));
+        fwrite(data, sizeof(char), proj->file_size, file);
+        free(data);
+        //fwrite(proj->file_data, sizeof(char), proj->file_size, file);        
         fclose(file);
     } else {
-        perror("Error creating data_dynamic.bin");
+        perror("Error creating files_paths.bin");
     }
 
-    // File for bss_constants
-    snprintf(filepath, sizeof(filepath), "%s/bss_constants.bin", proj->project_directory);
-    file = fopen(filepath, "wb");
-    if (file != NULL) {
-        proj->files_bss_constants = malloc(sizeof(char*));
-        proj->files_bss_constants[0] = malloc(strlen(filepath) + 1);
-        strcpy(proj->files_bss_constants[0], filepath);
-        fclose(file);
-    } else {
-        perror("Error creating bss_constants.bin");
-    }
-
-    // File for functions
-    snprintf(filepath, sizeof(filepath), "%s/functions.bin", proj->project_directory);
-    file = fopen(filepath, "wb");
-    if (file != NULL) {
-        proj->files_functions = malloc(sizeof(char*));
-        proj->files_functions[0] = malloc(strlen(filepath) + 1);
-        strcpy(proj->files_functions[0], filepath);
-        fclose(file);
-    } else {
-        perror("Error creating functions.bin");
-    }
 
     // File for free space
     snprintf(filepath, sizeof(filepath), "%s/free_space_file.bin", proj->project_directory);
@@ -91,25 +72,11 @@ void init_project(Project* proj, const char* project_name) {
 
 // Clean up project
 void clean_project(Project* proj) {
-    if (proj->files_data_dynamic) {
-        for (size_t i = 0; i < proj->files_data_dynamic_size; ++i) {
-            free(proj->files_data_dynamic[i]);
+    if (proj->files_paths_size) {
+        for (size_t i = 0; i < proj->files_paths_size; ++i) {
+            free(proj->files_paths[i]);
         }
-        free(proj->files_data_dynamic);
-    }
-
-    if (proj->files_bss_constants) {
-        for (size_t i = 0; i < proj->files_bss_constants_size; ++i) {
-            free(proj->files_bss_constants[i]);
-        }
-        free(proj->files_bss_constants);
-    }
-
-    if (proj->files_functions) {
-        for (size_t i = 0; i < proj->files_functions_size; ++i) {
-            free(proj->files_functions[i]);
-        }
-        free(proj->files_functions);
+        free(proj->files_paths);
     }
 
     free(proj->free_space_file);
@@ -139,25 +106,11 @@ void serialize_project(Project* proj, const char* filename) {
     fwrite(&proj->file_size, sizeof(ull), 1, file);
     fwrite(&proj->main_function, sizeof(ull), 1, file);
 
-    fwrite(&proj->files_data_dynamic_size, sizeof(size_t), 1, file);
-    for (size_t i = 0; i < proj->files_data_dynamic_size; ++i) {
-        size_t len = strlen(proj->files_data_dynamic[i]) + 1;
+    fwrite(&proj->files_paths_size, sizeof(size_t), 1, file);
+    for (size_t i = 0; i < proj->files_paths_size; ++i) {
+        size_t len = strlen(proj->files_paths[i]) + 1;
         fwrite(&len, sizeof(size_t), 1, file);
-        fwrite(proj->files_data_dynamic[i], sizeof(char), len, file);
-    }
-
-    fwrite(&proj->files_bss_constants_size, sizeof(size_t), 1, file);
-    for (size_t i = 0; i < proj->files_bss_constants_size; ++i) {
-        size_t len = strlen(proj->files_bss_constants[i]) + 1;
-        fwrite(&len, sizeof(size_t), 1, file);
-        fwrite(proj->files_bss_constants[i], sizeof(char), len, file);
-    }
-
-    fwrite(&proj->files_functions_size, sizeof(size_t), 1, file);
-    for (size_t i = 0; i < proj->files_functions_size; ++i) {
-        size_t len = strlen(proj->files_functions[i]) + 1;
-        fwrite(&len, sizeof(size_t), 1, file);
-        fwrite(proj->files_functions[i], sizeof(char), len, file);
+        fwrite(proj->files_paths[i], sizeof(char), len, file);
     }
 
     size_t free_space_file_len = proj->free_space_file ? strlen(proj->free_space_file) + 1 : 0;
@@ -169,6 +122,8 @@ void serialize_project(Project* proj, const char* filename) {
     fwrite(&proj->project_stack.memory_size, sizeof(ull), 1, file);
     //fwrite(proj->project_stack.memory, sizeof(char), proj->project_stack.memory_size, file);
 
+    fwrite(&proj->last_offset, sizeof(ull), 1, file);
+    
     fclose(file);
 }
 
@@ -187,31 +142,13 @@ void deserialize_project(Project* proj, const char* filename) {
     fread(&proj->file_size, sizeof(ull), 1, file);
     fread(&proj->main_function, sizeof(ull), 1, file);
 
-    fread(&proj->files_data_dynamic_size, sizeof(size_t), 1, file);
-    proj->files_data_dynamic = malloc(proj->files_data_dynamic_size * sizeof(char*));
-    for (size_t i = 0; i < proj->files_data_dynamic_size; ++i) {
+    fread(&proj->files_paths_size, sizeof(size_t), 1, file);
+    proj->files_paths = malloc(proj->files_paths_size * sizeof(char*));
+    for (size_t i = 0; i < proj->files_paths_size; ++i) {
         size_t len;
         fread(&len, sizeof(size_t), 1, file);
-        proj->files_data_dynamic[i] = malloc(len * sizeof(char));
-        fread(proj->files_data_dynamic[i], sizeof(char), len, file);
-    }
-
-    fread(&proj->files_bss_constants_size, sizeof(size_t), 1, file);
-    proj->files_bss_constants = malloc(proj->files_bss_constants_size * sizeof(char*));
-    for (size_t i = 0; i < proj->files_bss_constants_size; ++i) {
-        size_t len;
-        fread(&len, sizeof(size_t), 1, file);
-        proj->files_bss_constants[i] = malloc(len * sizeof(char));
-        fread(proj->files_bss_constants[i], sizeof(char), len, file);
-    }
-
-    fread(&proj->files_functions_size, sizeof(size_t), 1, file);
-    proj->files_functions = malloc(proj->files_functions_size * sizeof(char*));
-    for (size_t i = 0; i < proj->files_functions_size; ++i) {
-        size_t len;
-        fread(&len, sizeof(size_t), 1, file);
-        proj->files_functions[i] = malloc(len * sizeof(char));
-        fread(proj->files_functions[i], sizeof(char), len, file);
+        proj->files_paths[i] = malloc(len * sizeof(char));
+        fread(proj->files_paths[i], sizeof(char), len, file);
     }
 
     size_t free_space_file_len;
@@ -229,6 +166,8 @@ void deserialize_project(Project* proj, const char* filename) {
 
     proj->project_stack.globals = NULL;
     proj->project_stack.frames = NULL;
+
+    fread(&proj->last_offset, sizeof(ull), 1, file);
 
     fclose(file);
 }
@@ -389,7 +328,7 @@ void init_function(Function* func) {
         return;
     }
 
-    func->offset = 0;
+    func->offset = 0;   // p.last_offset;
     func->visibility = 0;
     func->name = NULL;
     func->parameters = NULL;
@@ -398,11 +337,86 @@ void init_function(Function* func) {
     //func->local_var_count = 0;
     func->bytecode = NULL;
     func->bytecode_size = 0;
-    func->references = NULL;
-    func->ref_size = 0;
-    func->instructions = NULL;
-    func->instructions_size = 0;
+    func->references.type = OBJ_NONE;
+    func->references_size = 0;
+
+
+    func->instructions = malloc(sizeof(Instruction));
+    // set RET instruction
+    func->instructions[0].i_type = RET; func->instructions[0].data = NULL; func->instructions[0].instruction_start_offset = 0;
+    func->instructions_size = 1;
 }
+
+// calculate the size of a function
+size_t get_function_size(Function* func) {
+    size_t size = 0;
+    // sequantially compute attributes sizeof of bytes, include arrays
+    size += sizeof(func->offset);
+    size += sizeof(func->visibility);
+    size += strlen(func->name) + 1;
+    size += sizeof(func->param_count);
+    size += sizeof(ull) * func->param_count;
+    size += sizeof(func->bytecode);
+    size += sizeof(func->bytecode_size);
+    size += sizeof(func->references_size);
+    size += sizeof(ull) * func->references_size;
+    for (unsigned int i = 0; i < func->instructions_size; ++i) {
+        size += getInstructionSize(&func->instructions[i]);
+    }
+    size += sizeof(func->instructions);
+    size += sizeof(func->instructions_size);
+
+    return size;
+}
+
+Function* create_function(Project* p, const char* name) {
+    Function* func = malloc(sizeof(Function));
+    if (func == NULL) {
+        fprintf(stderr, "Failed to allocate memory for function.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    init_function(func);
+
+    p->opened_objects[p->opened_objects_size++]->type = OBJ_FUNCTION;
+    p->opened_objects[p->opened_objects_size++]->object.function = func;
+
+    func->name = strdup(name);
+
+
+    // determine if we have a free space for the function in free_space_file_data
+    size_t f_size = get_function_size(func);
+    size_t final_offset = 0;
+    char* file_path;
+    for (unsigned int i = 0; i < p->free_space_file_size; ++i) {
+        if (p->free_space_file_data[i].start + p->free_space_file_data[i].end == f_size) {
+            final_offset = p->free_space_file_data[i].start;
+        }
+    }
+
+    if(final_offset == 0) {
+        // calcutale which file it is according to p->file_size
+        size_t file_index = final_offset / p->file_size;
+        file_path = p->files_paths[file_index];
+    }
+    else {
+        // get the last file and last_offset
+        file_path = p->files_paths[p->free_space_file_size - 1];
+        final_offset = p->last_offset;
+
+    }
+
+
+    // set offset
+    func->offset = final_offset;
+    // set last_offset
+    p->last_offset += get_function_size(func);
+
+    serialize_function(p, func, file_path);
+
+    return func;
+}
+
 
 // Serialization function for Instruction
 size_t serialize_Instruction(const Instruction* instr, unsigned char* buffer) {
@@ -482,11 +496,11 @@ size_t serialize_SizeofType(const SizeofType* stype, unsigned char* buffer) {
     offset += sizeof(char);
 
     // Serialize BasicType enum
-    memcpy(buffer + offset, &(stype->type), sizeof(BasicType));
+    memcpy(buffer + offset, &(stype->basic_type), sizeof(BasicType));
     offset += sizeof(BasicType);
 
     // Serialize structure_access array
-    memcpy(buffer + offset, stype->structure_access, sizeof(unsigned long long) * 5);
+    memcpy(buffer + offset, stype->structure_access.object.struct_type, sizeof(unsigned long long) * 5);
     offset += sizeof(unsigned long long) * 5;
 
     return offset;
@@ -507,11 +521,11 @@ SizeofType* deserialize_SizeofType(const unsigned char* buffer) {
     offset += sizeof(char);
 
     // Deserialize BasicType enum
-    memcpy(&(stype->type), buffer + offset, sizeof(BasicType));
+    memcpy(&(stype->basic_type), buffer + offset, sizeof(BasicType));
     offset += sizeof(BasicType);
 
     // Deserialize structure_access array
-    memcpy(stype->structure_access, buffer + offset, sizeof(unsigned long long) * 5);
+    memcpy(stype->structure_access.object.struct_type, buffer + offset, sizeof(unsigned long long) * 5);
     offset += sizeof(unsigned long long) * 5;
 
     return stype;
@@ -558,7 +572,7 @@ size_t serialize_Node(const Node* node, unsigned char* buffer) {
             memcpy(buffer + offset, &(node->data.sizeof_.isBasic), sizeof(char));
             offset += sizeof(char);
             // Serialize structure_access array
-            memcpy(buffer + offset, node->data.sizeof_.structure_access, sizeof(unsigned long long) * 5);
+            memcpy(buffer + offset, node->data.sizeof_.structure_access.object.struct_type, sizeof(unsigned long long) * 5);
             offset += sizeof(unsigned long long) * 5;
             break;
         // Add cases for other NodeType values as needed
@@ -624,7 +638,7 @@ Node* deserialize_Node(const unsigned char* buffer) {
             memcpy(&(node->data.sizeof_.isBasic), buffer + offset, sizeof(char));
             offset += sizeof(char);
             // Deserialize structure_access array
-            memcpy(node->data.sizeof_.structure_access, buffer + offset, sizeof(unsigned long long) * 5);
+            memcpy(node->data.sizeof_.structure_access.object.struct_type, buffer + offset, sizeof(unsigned long long) * 5);
             offset += sizeof(unsigned long long) * 5;
             break;
         // Add cases for other NodeType values as needed
@@ -859,7 +873,7 @@ void serialize_struct_type(FILE *f, const StructType *st) {
     fwrite(&st->field_count, sizeof(unsigned int), 1, f);
 
     for (unsigned int i = 0; i < st->field_count; i++) {
-        serialize_variable(f, &st->fields[i]);
+        serialize_variable(f, &st->fields[i].object.variable);  // TODO:...
     }
 }
 
@@ -880,7 +894,8 @@ StructType* deserialize_struct_type(FILE *f) {
 
     st->fields = malloc(st->field_count * sizeof(Variable));
     for (unsigned int i = 0; i < st->field_count; i++) {
-        st->fields[i] = *deserialize_variable(f);
+        st->fields[i].type = OBJ_VARIABLE;
+        st->fields[i].object.variable = deserialize_variable(f);
     }
 
     return st;
@@ -899,7 +914,7 @@ void serialize_variable(FILE *f, const Variable *var) {
     fwrite(&var->visibility, sizeof(ObjectVisibility), 1, f);
     fwrite(&var->vtype, sizeof(var->vtype), 1, f);
 
-    if (var->vtype == BACIS_TYPE_VARUALBE) {
+    if (var->vtype == BASIC_TYPE_VARIABLE) {
         fwrite(&var->data.type, sizeof(BasicType), 1, f);
     } else if (var->vtype == STRUCT_TYPE_VARIABLE) {
         serialize_struct_type(f, var->data.struct_type);
@@ -920,7 +935,7 @@ Variable* deserialize_variable(FILE *f) {
     fread(&var->visibility, sizeof(ObjectVisibility), 1, f);
     fread(&var->vtype, sizeof(var->vtype), 1, f);
 
-    if (var->vtype == BACIS_TYPE_VARUALBE) {
+    if (var->vtype == BASIC_TYPE_VARIABLE) {
         fread(&var->data.type, sizeof(BasicType), 1, f);
     } else if (var->vtype == STRUCT_TYPE_VARIABLE) {
         var->data.struct_type = deserialize_struct_type(f);
@@ -933,9 +948,9 @@ Variable* deserialize_variable(FILE *f) {
 
 
 
-void serialize_function(Project *p, Function* fun) {
-    char* function_file = p->files_functions[0]; // Assuming single file for simplicity
-    FILE* f = fopen(function_file, "r+b");
+void serialize_function(Project *p, Function* fun, const char* file_path) {
+    //char* function_file = p->files_paths[0]; // Assuming single file for simplicity
+    FILE* f = fopen(file_path, "r+b");
 
     if (!f) {
         perror("Failed to open file");
@@ -944,6 +959,7 @@ void serialize_function(Project *p, Function* fun) {
 
     fseek(f, fun->offset, SEEK_SET);
 
+    fwrite(&fun->obj_type, sizeof(ObjectEnum), 1, f);
     fwrite(&fun->offset, sizeof(ull), 1, f);
     fwrite(&fun->parent, sizeof(ull), 1, f);
     fwrite(&fun->visibility, sizeof(ObjectVisibility), 1, f);
@@ -958,15 +974,15 @@ void serialize_function(Project *p, Function* fun) {
     fwrite(&fun->bytecode_size, sizeof(ull), 1, f);
     fwrite(fun->bytecode, sizeof(char), fun->bytecode_size, f);
 
-    fwrite(&fun->ref_size, sizeof(ull), 1, f);
-    fwrite(fun->references, sizeof(ull), fun->ref_size, f);
+    fwrite(&fun->references_size, sizeof(ull), 1, f);
+    //fwrite(fun->references, sizeof(ull), fun->references_size, f);
 
     fclose(f);
 }
 
 Function* deserialize_function(Project *p, ull offset) {
     Function* fun = malloc(sizeof(Function));
-    char* function_file = p->files_functions[0]; // Assuming single file for simplicity
+    char* function_file = p->files_paths[0]; // Assuming single file for simplicity
     FILE* f = fopen(function_file, "rb");
 
     if (!f) {
@@ -977,6 +993,7 @@ Function* deserialize_function(Project *p, ull offset) {
 
     fseek(f, offset, SEEK_SET);
 
+    fread(&fun->obj_type, sizeof(ObjectEnum), 1, f);
     fread(&fun->offset, sizeof(ull), 1, f);
     fread(&fun->parent, sizeof(ull), 1, f);
     fread(&fun->visibility, sizeof(ObjectVisibility), 1, f);
@@ -995,9 +1012,9 @@ Function* deserialize_function(Project *p, ull offset) {
     fun->bytecode = malloc(fun->bytecode_size);
     fread(fun->bytecode, sizeof(char), fun->bytecode_size, f);
 
-    fread(&fun->ref_size, sizeof(ull), 1, f);
-    fun->references = malloc(fun->ref_size * sizeof(ull));
-    fread(fun->references, sizeof(ull), fun->ref_size, f);
+    fread(&fun->references_size, sizeof(ull), 1, f);
+    //fun->references = malloc(fun->references_size * sizeof(ull));
+    //fread(fun->references, sizeof(ull), fun->references_size, f);
 
     fclose(f);
     return fun;
@@ -1030,6 +1047,50 @@ void update_function(Project *p, const Function* function_old, const Function* f
 }
 */
 
+int get_basic_type_size(BasicType type) {
+    switch (type) {
+        case BASIC_TYPE_CHAR:
+            return 1;
+        case BASIC_TYPE_SHORT:
+            return 2;
+        case BASIC_TYPE_INT:
+            return 4;
+        case BASIC_TYPE_LONG:
+            return 8;
+        case BASIC_TYPE_FLOAT:
+            return 4;
+        case BASIC_TYPE_DOUBLE:
+            return 8;
+        default:
+            return 0;
+    }
+}
+// TODO: finish this
+// function that calculates STRUCTOFFSET e.g. offset of field in structure
+int get_structure_sizeof_recursive(Project *p, StructType* st, ull offset_to_stop_at) {
+    int size = 0;
+    for (size_t i = 0; i < st->field_count; ++i) {
+        size += get_basic_type_size(st->fields[i].type);
+        if (st->fields[i].type == BASIC_TYPE_STRUCT) {
+            if(offset_to_stop_at == 0) {
+                StructType* child_st;// = p->structs[st->fields[i].data.struct_type];
+                size += get_structure_sizeof_recursive(p, child_st, offset_to_stop_at);
+            }
+            else {
+                StructType* child_st;// = p->structs[st->fields[i].data.struct_type];
+                // if a variable check its offset, if a struct, check its offset
+                // if offset is bigger, stop recursion and raise error
+                /*if(st->fields[i].offset > offset_to_stop_at) {
+                    fprintf(stderr, "Error: offset of struct exceeds offset of variable\n");
+                    exit(1);
+                }*/
+            }
+        }
+    }
+    return size;
+}
+
+
 
 void handle_MOV(Project *p, Instruction* instr) {
     DataMovement_s* dms = (DataMovement_s*)instr->data;
@@ -1045,6 +1106,37 @@ void handle_MOV(Project *p, Instruction* instr) {
                 }
             }
         }
+        else if(dms->dest.type == SIZEOF) {
+            if(dms->dest.data.sizeof_.isBasic) {
+                ull bs = get_basic_type_size(dms->dest.data.sizeof_.basic_type);
+                memcpy(&dms->dest.data.reg.value, &bs, sizeof(ull));
+            }
+            else {
+                // is structure, we need to calculate size of structure
+                ull bs = get_structure_sizeof_recursive(p, dms->dest.data.sizeof_.structure_access.object.struct_type, 0);
+                memcpy(&dms->dest.data.reg.value, &bs, sizeof(ull));
+            }
+        }
+        else if(dms->dest.type == C_VAR || dms->dest.type == G_VAR) {
+            if(dms->src_bytes_to_move.type == NODE_TYPE_NONE) {
+                memcpy(&dms->dest.data.var.value, &dms->src.data.var.value, sizeof(ull));
+            }
+            else {
+                memcpy(&dms->dest.data.var.value, &dms->src.data.var.value, dms->src_bytes_to_move.data.offset);
+            }
+        }
+        else if(dms->dest.type == STRUCTOFFSET) {
+            if(dms->src_bytes_to_move.type == NODE_TYPE_NONE) {
+                
+            }
+            else {
+                // check if offset is variable or struct and if it is in some structure up to the top one and then calculate offset
+                //ull size = get_structure_sizeof_recursive();
+
+            }
+        }
+
+        
     }
 }
 
@@ -1057,6 +1149,7 @@ void handle_Arithmetic(Project *p, Instruction* instr) {
     case IMUL:
     case DIV:
     case IDIV:
+        goto calculate;
     case INC:
     case DEC:
     case ADC:
@@ -1064,6 +1157,11 @@ void handle_Arithmetic(Project *p, Instruction* instr) {
     case NEG:
         break;
     }
+
+
+calculate:
+    
+
 }
 
 void handle_CMP(Project *p, Instruction* instr) {
