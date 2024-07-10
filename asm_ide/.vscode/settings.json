@@ -3,6 +3,14 @@
         "assembly.h": "c",
         "unistd.h": "c",
         "ncurses.h": "c",
-        "functional": "c"
+        "functional": "c",
+        "ratio": "c",
+        "system_error": "c",
+        "array": "c",
+        "tuple": "c",
+        "type_traits": "c",
+        "utility": "c",
+        "chrono": "c",
+        "compare": "c"
     }
 }

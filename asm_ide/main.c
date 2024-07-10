@@ -12,16 +12,19 @@ Instruction *current_instruction = NULL;
 
 #define INPUT_WINDOW_HEIGHT 3
 
-WINDOW *main_win, *input_win;
+WINDOW *main_win, *input_win, *details_win, *instructions_win;
 int parent_x, parent_y;
+int details_win_height = 10;  // Adjust height as needed
+int instructions_win_start_y;
 int main_win_current_column, main_win_current_row;
-char *instruction_list[][3]; // instructions but as char* in terminal in 3 parts, navigating with rows,cols and positions are the same as in function instructions
 
 void cleanup()
 {
     delwin(main_win);
     delwin(input_win);
     endwin();
+
+    exit(0);
 }
 
 void handle_resize(int sig)
@@ -61,9 +64,10 @@ void handle_resize(int sig)
     // Display the initial prompt in the input window
     mvwprintw(input_win, 1, 1, "<input># ");
     wrefresh(input_win);
+    wclear(main_win);
 
     // Redisplay the project info or other content in the main window
-    display_project_info("Project Info: Placeholder"); // Replace with actual project info
+    //display_project_info("Project Info: Placeholder"); // Replace with actual project info
 }
 
 void handle_sigint(int sig)
@@ -125,12 +129,18 @@ InstructionEnum get_instruction_type_from_name(const char *name) {
     return NONE;
 }
 
-char *get_instruction_address(Instruction *instr)
-{
-    char *address = malloc(10);
-    sprintf(address, "0x%04X ", instr->instruction_start_offset);
-    return address;
+void get_instruction_address(Instruction *instr, char *buffer) {
+
+    // Format the address using snprintf for safer bounds checking
+    int bytes_written = snprintf(buffer, 30, "%08lX", instr->instruction_start_offset);
+
+    // Ensure successful formatting (optional, but recommended for robustness)
+    if (bytes_written < 0) {
+        // Handle error (e.g., return NULL)
+        return NULL;
+    }
 }
+
 
 int parse_instruction_address(const char *address) {
     char *endptr;
@@ -142,15 +152,18 @@ int parse_instruction_address(const char *address) {
 }
 
 // construct operands from void* data, mostly specific type e.g. DataMovement_s and then Node*
-char *get_instruction_operands(Instruction *instr)
+void get_instruction_operands(Instruction *instr, char* operands)
 {
-    char *operands = malloc(100);
-
+    if(instr->data == NULL) {
+        sprintf(operands, " ");
+        return;
+    }
+    size_t len = 0;
     // switch for i_type
     switch (instr->i_type)
     {
     case MOV:
-    {
+    {    
         DataMovement_s *dm = (DataMovement_s *)instr->data;
         // switch for Node* NodeType in dm attributes
         switch (dm->dest.type)
@@ -172,26 +185,26 @@ char *get_instruction_operands(Instruction *instr)
         switch (dm->src.type)
         {
         case L_REG:
-            sprintf(operands, "%s", dm->src.data.reg.name);
+            sprintf(operands + len, "%s", dm->src.data.reg.name);
             break;
         case C_VAR:
-            sprintf(operands, "%s", dm->src.data.var.name);
+            sprintf(operands + len, "%s", dm->src.data.var.name);
             break;
         case CONSTANT:
-            sprintf(operands, "%llu", dm->src.data.offset);
+            sprintf(operands + len, "%llu", dm->src.data.offset);
             break;
         default:
-            sprintf(operands, "UNKNOWN");
+            sprintf(operands + len, "UNKNOWN");
             break;
         }
         // switch for Node* NodeType in dm attributes --> src_bytes_to_move
         switch (dm->src_bytes_to_move.type)
         {
         case CONSTANT:
-            sprintf(operands, ", %llu", dm->src_bytes_to_move.data.offset);
+            sprintf(operands + len, ",%llu", dm->src_bytes_to_move.data.offset);
             break;
         default:
-            sprintf(operands, ", UNKNOWN");
+            sprintf(operands + len, ",UNKNOWN");
             break;
         }
 
@@ -223,16 +236,16 @@ char *get_instruction_operands(Instruction *instr)
             switch (arith->src[i].type)
             {
             case L_REG:
-                sprintf(operands, "%s,%s", operands, arith->src[i].data.reg.name);
+                sprintf(operands + len, ",%s", arith->src[i].data.reg.name);
                 break;
             case C_VAR:
-                sprintf(operands, "%s,%s", operands, arith->src[i].data.var.name);
+                sprintf(operands + len, ",%s", arith->src[i].data.var.name);
                 break;
             case CONSTANT:
-                sprintf(operands, "%s%,llu", operands, arith->src[i].data.offset);
+                sprintf(operands + len, ",%llu", arith->src[i].data.offset);
                 break;
             default:
-                sprintf(operands, "%sUNKNOWN", operands);
+                sprintf(operands + len, ",UNKNOWN");
                 break;
             }
         }
@@ -240,7 +253,6 @@ char *get_instruction_operands(Instruction *instr)
     }
     break;
     }
-    return operands;
 }
 
 void parse_instruction_operands(const char *operands_str, Instruction *instr) {
@@ -280,20 +292,6 @@ void parse_instruction_operands(const char *operands_str, Instruction *instr) {
     // Add more cases for other instruction types (ADD, SUB, etc.)
 }
 
-char *(*construct_instruction_string(Instruction *instr))[1][3]
-{ // Function declaration with pointer to 2D array return type
-    static char *instruction_string[][3] = {0, 0, 0};
-
-    instruction_string[0][0] = get_instruction_address(instr);
-    instruction_string[0][1] = get_instruction_name(instr);
-
-    char *operands = get_instruction_operands(instr);
-    instruction_string[0][2] = operands;
-    free(operands);
-
-    return instruction_string;
-}
-
 Instruction *construct_instruction_from_strings(const char *address_str, const char *name_str, const char *operands_str) {
     Instruction *instr = (Instruction *)malloc(sizeof(Instruction));
     instr->instruction_start_offset = parse_instruction_address(address_str);
@@ -304,61 +302,181 @@ Instruction *construct_instruction_from_strings(const char *address_str, const c
     return instr;
 }
 
-
-void display_assembly(WINDOW *win)
-{
-    // Sample assembly code
-    const char *instructions[][3] = {
-        {"Address", "Instruction", "Operands"},
-        {"0x0001", "MOV", "AX, BX"},
-        {"0x0002", "ADD", "AX, 1"},
-        {"0x0003", "SUB", "AX, BX"},
-        {"0x0004", "JMP", "0x0001"},
-    };
-    int num_instructions = sizeof(instructions) / sizeof(instructions[0]);
-
-    // Display the table header
+void display_function_details(WINDOW *win, Function *func) {
+    // Clear the window
+    wclear(win);
+    box(win, 0, 0);
     wattron(win, A_BOLD);
-    mvwprintw(win, 1, 1, "%-10s %-15s %-10s", instructions[0][0], instructions[0][1], instructions[0][2]);
+    mvwprintw(win, 1, 1, "Function Details");
     wattroff(win, A_BOLD);
-    /*
-    // Display the instructions in the window
-    for (int i = 1; i < num_instructions; ++i) {
-        mvwprintw(win, i + 1, 1, "%-10s %-15s %-10s", instructions[i][0], instructions[i][1], instructions[i][2]);
+    mvwprintw(win, 2, 1, "Name: %s", func->name);
+    mvwprintw(win, 3, 1, "Offset: 0x%llX", func->offset);
+    if(func->parent.type == OBJ_FUNCTION) {
+        mvwprintw(win, 4, 1, "Parent: %s (0x%llX)", func->parent.object.function->offset, func->parent.object.offset);
+    } else {
+        mvwprintw(win, 4, 1, "Parent: 0x%llX", func->parent.object.offset);
     }
-    */
-    for (int i = 0; i < current_function->instructions_size; i++)
-    {
-        Instruction *instr = &current_function->instructions[i];
-        char* (*instruction_string)[1][3] = construct_instruction_string(instr);
-        mvwprintw(win, i + 1, 1, "%-10s %-15s %-10s", instruction_string[0][0], instruction_string[0][1], instruction_string[0][2]);
+    mvwprintw(win, 5, 1, "Visibility: %s", 
+        func->visibility == PUBLIC ? "Public" :
+        func->visibility == PRIVATE ? "Private" :
+        func->visibility == PROTECTED ? "Protected" : "Unknown");
+    mvwprintw(win, 6, 1, "Parameter Count: %u", func->param_count);
+    
+    for (unsigned int i = 0; i < func->param_count; ++i) {
+        mvwprintw(win, 7 + i, 1, "Parameter %d: %s", i + 1, func->parameters[i].variable->name);
+    }
+    mvwprintw(win, 8, 1, "Instruction Count: %llu", func->instructions_size);
+    
+    wrefresh(win);
+}
+
+void display_instructions(WINDOW *win, Function *func) {
+    // Clear the window
+    wclear(win);
+    box(win, 0, 0);
+    
+    // Display the header
+    wattron(win, A_BOLD);
+    mvwprintw(win, 1, 1, "%-10s %-15s %-10s", "Address", "Instruction", "Operands");
+    wattroff(win, A_BOLD);
+
+    for (ull i = 0; i < func->instructions_size; i++) {
+        Instruction *instr = &func->instructions[i];
+        char addr[30];
+        get_instruction_address(instr, addr);
+        char operands[300];
+        get_instruction_operands(instr, operands);
+        mvwprintw(win, i + 2, 1, "%-10s %-15s %-10s", addr, get_instruction_name(instr), operands);
     }
 
     wrefresh(win);
-    // clear window so that it will be empty:
-    // wclear(win);
-    // wrefresh(win);
 }
 
+void show_function_info(Function *func) {
+    wclear(main_win);
+    wrefresh(input_win);
+
+    // Get terminal size
+    getmaxyx(stdscr, parent_y, parent_x);
+
+    // Calculate positions and sizes
+    instructions_win_start_y = details_win_height + 1;
+
+    // Create windows
+    details_win = newwin(details_win_height, parent_x, 0, 0);
+    instructions_win = newwin(parent_y - details_win_height - 1, parent_x, instructions_win_start_y, 0);
+
+    // Display function details
+    display_function_details(details_win, func);
+    
+    // Display instructions
+    display_instructions(instructions_win, func);
+
+    // Cleanup
+    delwin(details_win);
+    delwin(instructions_win);
+    //endwin();
+}
+
+void analyze_user_input(char *input);
 void get_user_input(WINDOW *input_win)
 {
     char input[80];
-    mvwgetnstr(input_win, 1, 10, input, sizeof(input) - 1); // Get user input
-    // Display the user input back in the input window
-    mvwprintw(input_win, 1, 1, "<input># %s", input);
-    wrefresh(input_win);
+    int pos = 0;
+    int len = 0;
+    int ch;
+
+    while ((ch = wgetch(input_win)) != '\n' && ch != KEY_ENTER)
+    {
+        if (ch == 27) // ESC
+        {
+            goto only_clear;
+        }
+        else if (ch == KEY_BACKSPACE || ch == 127)
+        {
+            if (pos > 0)
+            {
+                pos--;
+                mvwdelch(input_win, 1, 10 + pos);
+                wclrtoeol(input_win);
+            }
+            continue;
+        }
+        else if (ch == KEY_HOME)
+        {
+            pos = 0;
+            wmove(input_win, 1, 10 + pos);
+            continue;
+        }
+        else if (ch == KEY_LEFT)
+        {
+            if (pos > 0)
+            {
+                pos--;
+                wmove(input_win, 1, 10 + pos);
+            }
+            continue;
+        }
+        else if (ch == KEY_RIGHT)
+        {
+            if (pos < len)
+            {
+                pos++;
+                wmove(input_win, 1, 10 + pos);
+            }
+            continue;
+        }
+        else if (isprint(ch))
+        {
+            if (pos < sizeof(input) - 1)
+            {
+                input[pos++] = ch;
+                len++;
+                waddch(input_win, ch);
+            }
+            continue;
+        }
+        else if (ch == KEY_END)
+        {
+            pos = len;
+            wmove(input_win, 1, 10 + pos);
+            continue;
+        }
+        wrefresh(input_win);
+    }
+
+    input[pos] = '\0';
+
+    // Call the function to analyze the input
+    analyze_user_input(input);
+
+only_clear:
+    // Clear the input line and reset the prompt
+    wmove(input_win, 1, 1);
+    wclrtoeol(input_win); // Clear to end of line
+    mvwprintw(input_win, 1, 1, "<input># "); // Reset prompt
+    wmove(input_win, 1, 10); // Move cursor back to input position
+    wrefresh(input_win); // Refresh window to show changes
 }
 
 void display_project_info()
 {
+    wclear(main_win);
+    wrefresh(input_win);
+    
     box(main_win, 0, 0);
     mvwprintw(main_win, 2, 2, "Project info:");
     char file_size_str[64];
     sprintf(file_size_str, "%llu", p.file_size);
     mvwprintw(main_win, 4, 2, "File size: %s", file_size_str);
-    char main_function_str[64];
-    sprintf(main_function_str, "%llu", p.main_function);
-    mvwprintw(main_win, 5, 2, "Main function: %s", main_function_str);
+    if(p.main_function.type == OBJ_FUNCTION)
+    {
+        mvwprintw(main_win, 5, 2, "Main function: %s (%llu)", p.main_function.object.function->name, p.main_function.object.function->offset);
+    } 
+    else {
+        mvwprintw(main_win, 5, 2, "Main function: %llu", p.main_function.object.offset);
+    }
+    
     mvwprintw(main_win, 6, 2, "Files paths:");
     int line = 7;
     for (int i = 0; i < p.files_paths_size; i++)
@@ -403,6 +521,7 @@ void analyze_user_input(char *input)
     const char *kw_variable = "variable";
     const char *kw_structure = "structure";
     const char *kw_set = "set";
+    const char *kw_exit = "exit";
 
     // TODO:
     // 1. Parse the input string
@@ -474,17 +593,21 @@ void analyze_user_input(char *input)
             if (strcmp(token, kw_main) == 0)
             {
                 // Handle "add main" keyword
-                if (p.main_function != 0)
+                if (p.main_function.object.offset != 0)
                 {
+                    wclear(main_win);
                     mvwprintw(main_win, 1, 1, "Main function already exists.");
+                    wrefresh(main_win);
                 }
                 else
                 {
                     // add main function
-                    create_function(&p, "main");
-                    p.main_function = 1;
+                    p.main_function.object.function = create_function(&p, "main");
+                    p.main_function.type = OBJ_FUNCTION;
 
+                    wclear(main_win);
                     mvwprintw(main_win, 1, 1, "Main function added.");
+                    wrefresh(main_win);
                 }
             }
             // Handle "add" keyword
@@ -527,12 +650,22 @@ void analyze_user_input(char *input)
                 if (strcmp(token, kw_main) == 0) {
                     // Handle "show function main" keyword
                     //display_function_info(p.main_function);
+                    if(p.main_function.object.function == NULL) {
+                        wclear(main_win);
+                        mvwprintw(main_win, 1, 1, "No main function found.");
+                        wrefresh(main_win);
+                    }
+                    else {
+                        show_function_info(p.main_function.object.function);
+                    }
                 }
                 else {
                     // get function ull offset, read it and display
-
-
-
+                    ull offset;
+                    // from token convert ull string to number
+                    offset = strtoull(token, NULL, 16);
+                    Function* fun = deserialize_function(&p, offset);
+                    show_function_info(fun);
                 }
             }
         }
@@ -544,12 +677,18 @@ void analyze_user_input(char *input)
         {
             // Handle "set" keyword
         }
+        else if (strcmp(token, kw_delete) == 0) {
+
+        }
+        else if (strcmp(token, kw_exit) == 0) {
+            clean_project(&p);
+            cleanup();
+        }
         else
         {
             mvwprintw(main_win, 1, 1, "Invalid command.");
         }
-
-        token = strtok(NULL, " ");
+        token = strtok(NULL, " \n\0");
     }
 }
 
@@ -583,29 +722,11 @@ void init_terminal_windows()
     // Place cursor in the input window
     wmove(input_win, 1, 10);
     wrefresh(input_win);
-
+    
     // Main loop for capturing user input
     while (1)
     {
-        int ch = wgetch(input_win);
-        if (ch == '\n' || ch == KEY_ENTER)
-        { // Handle Enter key
-            get_user_input(input_win);
-            // Reset input prompt
-            mvwprintw(input_win, 1, 1, "<input># ");
-            wclrtoeol(input_win);    // Clear to end of line
-            wmove(input_win, 1, 10); // Move cursor back to input position
-            wrefresh(input_win);
-        }
-        else if (ch == 27)
-        {          // Handle Escape key (ASCII 27)
-            break; // Exit loop
-        }
-        else if (isprint(ch))
-        { // Handle printable characters
-            waddch(input_win, ch);
-            wrefresh(input_win);
-        }
+        get_user_input(input_win);
     }
 
     cleanup();

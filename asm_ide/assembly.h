@@ -323,7 +323,9 @@ typedef enum SSEInstructions {
 
 typedef enum InstructionEnum {
     NONE,
-    SYSCALL,// system call: SYSCALL 15  --> constant --> any number represents standard system call
+    SYSCALL,// system call: SYSCALL 15  --> constant --> any number represents standard system call,
+    LABEL,  // label: LABEL label
+    VAR,    // variable -> local: VAR <type ull or basic name> <name> <default value>
     MOV,    // Move data: MOV dest, src
     PUSH,   // Push data onto stack: PUSH src
     POP,    // Pop data from stack: POP dest
@@ -467,8 +469,8 @@ typedef struct Instruction {
 
 } Instruction;
 
-
-
+Instruction deserialize_Instruction(FILE* file);  // TODO: deser. by file pointer
+size_t serialize_Instruction(const Instruction* instr, unsigned char* buffer);
 
 
 
@@ -631,11 +633,20 @@ typedef struct Variable {
 
     VariableValue value;
 
+    // relations to other object they work with, just this abstraction
+    Object* relations;
+    size_t relations_size;
 
     // references ull to child offsets variables
     Object* references;
     size_t references_size;
 } Variable;
+
+typedef struct Parameter {
+    Variable* variable; // this is not Object because it will always be resolved as variables, not using ull offset here, never.
+    char in_out;    // if 0 -> in, if 1 -> out
+} Parameter;
+
 
 // Define a structure to represent a function
 typedef struct Function {
@@ -644,14 +655,10 @@ typedef struct Function {
     Object parent; // module or class
     ObjectVisibility visibility;
     char* name; // ends with \0
-    Object* parameters; // Variable*  TODO: * or **
+    Parameter* parameters; // Variable*  TODO: * or **
     unsigned int param_count;
     Instruction* instructions;
     ull instructions_size;
-    char* bytecode;             // whole serialized bytecode
-    ull bytecode_size;
-
-    ull function_size;  // whole bytecode size
 
     Object  references;     // to calls, usages
     ull     references_size;
@@ -722,11 +729,19 @@ typedef struct Logical_s {
     Node src;
 } Logical_s;
 
+typedef struct Call_s {
+    Node dest;
+    Function* function;
+    Node* parameters;
+    unsigned char parameters_size;
+} Call_s;
+
 typedef struct call_stack {
     Function* function;
-    Variable* variables;
-    local_register* c_registers;    // call passed registers    // TODO: this Variable
+    Variable* variables;    // including c_variables
+    size_t variables_size;
     local_register* l_registers;    // local registers to this scope
+    size_t l_registers_size;
 
 } call_stack;
 
@@ -764,7 +779,7 @@ typedef struct Range {
 typedef struct Project {
     ull file_size;
 
-    ull main_function;
+    Object main_function;
 
     char** files_paths;      // all data in binary
     size_t files_paths_size;
@@ -774,6 +789,8 @@ typedef struct Project {
     Object** opened_objects;
     size_t opened_objects_size;
 
+    Object** top_level_objects; // objects that belongs to this project, mostly modules, structs --> they have associated other objects, building tree structure
+    size_t top_level_objects_size;
 
     char* free_space_file;          // free ranges of bytes that can be filled for each group ^^^
     Range* free_space_file_data;
@@ -801,10 +818,12 @@ void memory_write(stack* s, size_t dest, void* src, size_t size);
 Function* deserialize_function(Project *p, ull offset);
 void serialize_function(Project *p, Function* fun, const char* file_path);
 // function which take FILE* f suppose that position on disk is set to correct position/offset
-void serialize_variable(FILE *f, const Variable *var);
+size_t serialize_variable(const Variable *var, unsigned char* buffer);
 Variable* deserialize_variable(FILE *f);
 void serialize_struct_type(FILE *f, const StructType *st);
 StructType* deserialize_struct_type(FILE *f);
+size_t serialize_Node(const Node* node, unsigned char* buffer);
+Node deserialize_Node(FILE* file);
 
 void interpret_Instruction(Project *p, Instruction* instr);
 

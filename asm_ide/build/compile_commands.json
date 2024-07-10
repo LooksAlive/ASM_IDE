@@ -1,12 +1,12 @@
 [
 {
   "directory": "/home/adam/Desktop/ASM_IDE/asm_ide/build",
-  "command": "/usr/bin/gcc -I/home/adam/Desktop/ASM_IDE/asm_ide/. -g -O0 -g -o CMakeFiles/asm_ide.dir/main.c.o -c /home/adam/Desktop/ASM_IDE/asm_ide/main.c",
+  "command": "/usr/bin/gcc -I/home/adam/Desktop/ASM_IDE/asm_ide/. -g -O0 -fsanitize=leak -g -o CMakeFiles/asm_ide.dir/main.c.o -c /home/adam/Desktop/ASM_IDE/asm_ide/main.c",
   "file": "/home/adam/Desktop/ASM_IDE/asm_ide/main.c"
 },
 {
   "directory": "/home/adam/Desktop/ASM_IDE/asm_ide/build",
-  "command": "/usr/bin/gcc -I/home/adam/Desktop/ASM_IDE/asm_ide/. -g -O0 -g -o CMakeFiles/asm_ide.dir/assembly.c.o -c /home/adam/Desktop/ASM_IDE/asm_ide/assembly.c",
+  "command": "/usr/bin/gcc -I/home/adam/Desktop/ASM_IDE/asm_ide/. -g -O0 -fsanitize=leak -g -o CMakeFiles/asm_ide.dir/assembly.c.o -c /home/adam/Desktop/ASM_IDE/asm_ide/assembly.c",
   "file": "/home/adam/Desktop/ASM_IDE/asm_ide/assembly.c"
 }
 ]

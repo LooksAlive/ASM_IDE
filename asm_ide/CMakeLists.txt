@@ -4,7 +4,7 @@ project(asm_ide LANGUAGES C)
 
 set(CMAKE_C_COMPILER "/usr/bin/gcc")
 
-set(CMAKE_C_FLAGS "-g -O0") # -fsanitize=address -fsanitize=undefined -fsanitize=leak  -fsanitize=shadow-call-stack
+set(CMAKE_C_FLAGS "-g -O0 -fsanitize=leak") # -fsanitize=address -fno-omit-frame-pointer -fsanitize=undefined -fsanitize=leak  -fsanitize=shadow-call-stack
 
 
 set (CPARSER_INCLUDE

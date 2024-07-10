@@ -51,14 +51,14 @@ build cmake_object_order_depends_target_asm_ide: phony || CMakeFiles/asm_ide.dir
 
 build CMakeFiles/asm_ide.dir/main.c.o: C_COMPILER__asm_ide_Debug /home/adam/Desktop/ASM_IDE/asm_ide/main.c || cmake_object_order_depends_target_asm_ide
   DEP_FILE = CMakeFiles/asm_ide.dir/main.c.o.d
-  FLAGS = -g -O0 -g
+  FLAGS = -g -O0 -fsanitize=leak -g
   INCLUDES = -I/home/adam/Desktop/ASM_IDE/asm_ide/.
   OBJECT_DIR = CMakeFiles/asm_ide.dir
   OBJECT_FILE_DIR = CMakeFiles/asm_ide.dir
 
 build CMakeFiles/asm_ide.dir/assembly.c.o: C_COMPILER__asm_ide_Debug /home/adam/Desktop/ASM_IDE/asm_ide/assembly.c || cmake_object_order_depends_target_asm_ide
   DEP_FILE = CMakeFiles/asm_ide.dir/assembly.c.o.d
-  FLAGS = -g -O0 -g
+  FLAGS = -g -O0 -fsanitize=leak -g
   INCLUDES = -I/home/adam/Desktop/ASM_IDE/asm_ide/.
   OBJECT_DIR = CMakeFiles/asm_ide.dir
   OBJECT_FILE_DIR = CMakeFiles/asm_ide.dir
@@ -72,7 +72,7 @@ build CMakeFiles/asm_ide.dir/assembly.c.o: C_COMPILER__asm_ide_Debug /home/adam/
 # Link the executable asm_ide
 
 build asm_ide: C_EXECUTABLE_LINKER__asm_ide_Debug CMakeFiles/asm_ide.dir/main.c.o CMakeFiles/asm_ide.dir/assembly.c.o
-  FLAGS = -g -O0 -g
+  FLAGS = -g -O0 -fsanitize=leak -g
   LINK_LIBRARIES = -lcurses
   OBJECT_DIR = CMakeFiles/asm_ide.dir
   POST_BUILD = :
