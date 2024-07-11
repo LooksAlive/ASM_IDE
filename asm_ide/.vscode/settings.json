@@ -11,6 +11,9 @@
         "type_traits": "c",
         "utility": "c",
         "chrono": "c",
-        "compare": "c"
+        "compare": "c",
+        "stdbool.h": "c",
+        "*.tcc": "c",
+        "random": "c"
     }
 }

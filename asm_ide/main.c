@@ -4,6 +4,10 @@
 
 #include <signal.h>
 #include <ncurses.h>
+#include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
 
 static Project p;
 
@@ -12,11 +16,60 @@ Instruction *current_instruction = NULL;
 
 #define INPUT_WINDOW_HEIGHT 3
 
-WINDOW *main_win, *input_win, *details_win, *instructions_win;
+WINDOW *main_win, *input_win, *details_win, *instructions_win, *registers_win, *stack_win, *memory_win, *help_win, *stack_vars_win, *call_stack_win;
 int parent_x, parent_y;
 int details_win_height = 10;  // Adjust height as needed
-int instructions_win_start_y;
+int instructions_win_start_y = 11;
 int main_win_current_column, main_win_current_row;
+
+
+typedef enum Mode {
+    MODE_NONE = 0,
+    MODE_FUNCTION_INFO = 1 << 0,
+    MODE_INSTRUCTION_INFO = 1 << 1,
+    MODE_INSTRUCTION_EDIT = 1 << 2,
+    MODE_INSTRUCTION_ADD = 1 << 3,
+    MODE_INSTRUCTION_DELETE = 1 << 4,
+    MODE_PROJECT_INFO = 1 << 5,
+    MODE_PROJECT_EDIT = 1 << 6,
+    MODE_PROJECT_ADD = 1 << 7,
+    MODE_PROJECT_DELETE = 1 << 8,
+    MODE_PROJECT_SAVE = 1 << 9,
+    MODE_PROJECT_LOAD = 1 << 10,
+    MODE_PROJECT_NEW = 1 << 11,
+    MODE_PROJECT_CLEAN = 1 << 12,
+    MODE_PROJECT_EXIT = 1 << 13,
+    MODE_PROJECT_HELP = 1 << 14,
+    MODE_PROJECT_ABOUT = 1 << 15,
+    MODE_INSTRUCTION_HELP = 1 << 16,
+    MODE_INSTRUCTION_ABOUT = 1 << 17,
+    MODE_INSTRUCTION_SAVE = 1 << 18,
+    MODE_FUNCTION_EDIT = 1 << 19,
+} Mode;
+
+// boolean values
+int mode = MODE_NONE;
+
+void set_mode(Mode mode_, bool clear) {
+    if (clear) {
+        mode = 0;
+    }
+    mode |= mode_;
+}
+
+char* strdup(const char* str) {
+    if (str == NULL) {
+        return NULL;
+    }
+    size_t len = strlen(str) + 1;
+    char* copy = malloc(len);
+    if (copy != NULL) {
+        memcpy(copy, str, len);
+    }
+    return copy;
+}
+
+
 
 void cleanup()
 {
@@ -354,7 +407,7 @@ void display_instructions(WINDOW *win, Function *func) {
 
 void show_function_info(Function *func) {
     wclear(main_win);
-    wrefresh(input_win);
+    //wrefresh(input_win);
 
     // Get terminal size
     getmaxyx(stdscr, parent_y, parent_x);
@@ -363,8 +416,8 @@ void show_function_info(Function *func) {
     instructions_win_start_y = details_win_height + 1;
 
     // Create windows
-    details_win = newwin(details_win_height, parent_x, 0, 0);
-    instructions_win = newwin(parent_y - details_win_height - 1, parent_x, instructions_win_start_y, 0);
+    //details_win = newwin(details_win_height, parent_x, 0, 0);
+    //instructions_win = newwin(parent_y - details_win_height - 1, parent_x, instructions_win_start_y, 0);
 
     // Display function details
     display_function_details(details_win, func);
@@ -373,14 +426,19 @@ void show_function_info(Function *func) {
     display_instructions(instructions_win, func);
 
     // Cleanup
-    delwin(details_win);
-    delwin(instructions_win);
+    //delwin(details_win);
+    //delwin(instructions_win);
     //endwin();
 }
 
 void analyze_user_input(char *input);
 void get_user_input(WINDOW *input_win)
 {
+    wclear(input_win);
+    mvwprintw(input_win, 1, 1, "<input># ");
+    box(input_win, 0, 0);
+    wrefresh(input_win);
+
     char input[80];
     int pos = 0;
     int len = 0;
@@ -525,7 +583,7 @@ void analyze_user_input(char *input)
 
     // TODO:
     // 1. Parse the input string
-    char *token = strtok(input, " ");
+    char *token = strtok(input, " \n\0");
     while (token != NULL)
     {
         if (strcmp(token, kw_project) == 0)
@@ -641,6 +699,7 @@ void analyze_user_input(char *input)
                 else
                 {
                     display_project_info();
+                    current_function = NULL;
                 }
             }
             // function 
@@ -657,6 +716,7 @@ void analyze_user_input(char *input)
                     }
                     else {
                         show_function_info(p.main_function.object.function);
+                        current_function = p.main_function.object.function;
                     }
                 }
                 else {
@@ -672,6 +732,20 @@ void analyze_user_input(char *input)
         else if (strcmp(token, kw_edit) == 0)
         {
             // Handle "edit" keyword
+            token = strtok(NULL, " \n\0");
+            if (strcmp(token, kw_function) == 0) {
+                token = strtok(NULL, " \n\0");
+                if(current_function == NULL) {
+                    wclear(main_win);
+                    mvwprintw(main_win, 1, 1, "No function loaded.");
+                    wrefresh(main_win);
+                }
+                else {
+                    set_mode(MODE_FUNCTION_EDIT, true);
+                    return;
+                }
+            }
+            // current function if loaded
         }
         else if (strcmp(token, kw_set) == 0)
         {
@@ -692,6 +766,415 @@ void analyze_user_input(char *input)
     }
 }
 
+
+void analyze_command(char *command) {
+    char *token = strtok(command, " \n\0");
+    if (strcmp(token, "set") == 0)
+    {
+        token = strtok(NULL, " \n\0");
+        if (strcmp(token, "name") == 0) {
+            token = strtok(NULL, " \n");
+            free(current_function->name);
+            current_function->name = strdup(token);
+            show_function_info(current_function);
+        }  else if (strcmp(token, "visibility") == 0) {
+            token = strtok(NULL, " \n\0");
+            if (strcmp(token, "PRIVATE") == 0) {
+                current_function->visibility = PRIVATE;
+            } else if (strcmp(token, "PUBLIC") == 0) {
+                current_function->visibility = PUBLIC;
+            } else if (strcmp(token, "PROTECTED") == 0) {
+                current_function->visibility = PROTECTED;
+            } else {
+                current_function->visibility = PROTECTED; // default
+            }
+        }  else if (strcmp(token, "reference") == 0) {
+            current_function->references_size = strtoull(token, NULL, 10);
+        }
+    }
+    else if (strcmp(token, "exit") == 0) {
+        set_mode(MODE_NONE, true);
+        return;
+    }
+    else if (strcmp(token, "add") == 0) {
+        token = strtok(NULL, " \n\0");
+        if (strcmp(token, "parameter") == 0) {
+            token = strtok(NULL, " \n");
+            //Parameter *param = malloc(sizeof(Parameter));
+            show_function_info(current_function);
+        }
+    }
+    // edit instructions
+    else if (strcmp(token, "edit") == 0) {
+        token = strtok(NULL, " \n\0");
+        if (strcmp(token, "instruction") == 0) {
+            token = strtok(NULL, " \n");
+            set_mode(MODE_INSTRUCTION_EDIT, true);
+        }
+    }
+    else {
+        //mvwprintw(main_win, 1, 1, "Invalid command.");
+    }
+}
+
+
+void edit_function_parameters() {
+    char command[256];
+    int pos = 0;
+    int ch;
+
+    // Initial display
+    wclear(input_win);
+    box(input_win, 0, 0);
+    //mvwprintw(input_win, 1, 1, "Edit Function: %s", current_function->name);
+    mvwprintw(input_win, 1, 1, "<editf># ");
+    wmove(input_win, 1, 10);
+    wrefresh(input_win);
+
+    while (1) {
+        ch = wgetch(input_win);
+
+        if (ch == 27) { // ESC key to exit
+            break;
+        } else if (ch == '\n' || ch == KEY_ENTER) { // Enter key to process command
+            command[pos] = '\0';
+            analyze_command(command);
+            pos = 0; // Reset position for new input
+            memset(command, 0, sizeof(command)); // Clear command buffer
+
+            // Redraw input prompt after processing
+            wclear(input_win);
+            box(input_win, 0, 0);
+            //mvwprintw(input_win, 1, 1, "Edit Function: %s", current_function->name);
+            mvwprintw(input_win, 1, 1, "<editf># ");
+            wmove(input_win, 1, 10);
+            wrefresh(input_win);
+            break;
+        } else if (ch == KEY_BACKSPACE || ch == 127) { // Backspace key
+            if (pos > 0) {
+                pos--;
+                mvwdelch(input_win, 1, 10 + pos);
+                wclrtoeol(input_win);
+                wmove(input_win, 1, 10 + pos);
+            }
+        } else if (isprint(ch)) { // Printable character
+            if (pos < sizeof(command) - 1) {
+                command[pos++] = ch;
+                waddch(input_win, ch);
+            }
+        }
+        wrefresh(input_win);
+    }
+}
+
+static Node d_node; // designed node 
+Node construct_node_from_user_design_input() {
+    char command[256];
+    int pos = 0;
+    int ch;
+
+    // Initial display
+    wclear(input_win);
+    box(input_win, 0, 0);
+    mvwprintw(input_win, 1, 1, "<edit_node_opcode># ");
+    wmove(input_win, 1, strlen("<edit_node_opcode># "));
+    wrefresh(input_win);
+    while (1) {
+        ch = wgetch(input_win);
+        if (ch == 27) { // ESC key to exit
+            break;
+        }
+        // here we catch specific keys where each key will represent enum type we set to node: NodeType
+        switch(ch) {
+            case 'c':   // offset
+                d_node.type = CONSTANT;
+                break;
+            case 'v': // L_VAR
+                d_node.type = L_VAR;
+                break;
+            case 'd': // DEREFERENCE
+                d_node.type = DEREFERENCE;
+                // .data will become another Node*
+                {
+                    char *token = strtok(NULL, " \n\0");
+                    if (token == NULL) {
+                        mvwprintw(input_win, 1, 1, "Invalid command.");
+                        break;
+                    }
+                    *d_node.data.dereference = construct_node_from_user_design_input(); // FIX THIS
+                }
+                break;
+            case 's': // SIZEOF
+                d_node.type = SIZEOF;
+                break;
+            case 'o': // STRUCTOFFSET
+                d_node.type = STRUCTOFFSET;
+                break;
+            case 'r': // L_REG
+                d_node.type = L_REG;
+                break;
+            default:
+                break;            
+        }
+    }
+
+    return d_node;
+}
+
+
+void analyze_instruction_command(char *command) {
+    char *token = strtok(command, " \n");
+    if (token == NULL) {
+        return;
+    }
+
+    if (strcmp(token, "insert") == 0) {
+        token = strtok(NULL, " \n");
+        if (token == NULL) return;
+        ull offset = strtoull(token, NULL, 10);
+        // insert new instruction at this offset, now lets designing the instruction
+
+        //void insert_instruction(Function* func, const Instruction instr, unsigned int index)
+        Instruction instr;
+        // now we as user to type the instruction parts, opcode, operand, etc.
+        wclear(input_win);
+        //box(input_win, 0, 0);
+        mvwprintw(input_win, 1, 1, "<edit_inst_insert_opcode># ");
+        wmove(input_win, 1, strlen("<edit_inst_insert_opcode># "));
+        wrefresh(input_win);
+
+
+        char* opcode = malloc(256);
+        int pos = 0;
+        while(1) {
+            int ch = wgetch(input_win);
+            if (ch == 27) { // ESC key to exit
+                return;
+            }
+            else if (ch == '\n' || ch == KEY_ENTER) { // Enter key to process command
+                opcode[pos] = '\0';
+                break;
+            }
+            else if (ch == KEY_BACKSPACE || ch == 127) { // Backspace key
+                if (pos > 0) {
+                    pos--;
+                    mvwdelch(input_win, 1, strlen("<edit_inst_insert_opcode># ") + pos);
+                    wclrtoeol(input_win);
+                    wmove(input_win, 1, strlen("<edit_inst_insert_opcode># ") + pos);
+                }
+            }
+            else if (isprint(ch)) { // Printable character 
+                if (pos < sizeof(opcode) - 1) {
+                    opcode[pos++] = ch;
+                    waddch(input_win, ch);
+                }
+            }
+            wrefresh(input_win);
+        }
+
+        instr.i_type = get_instruction_type_from_name(opcode);
+        free(opcode);
+        
+        wclear(input_win);
+        //box(input_win, 0, 0);
+        mvwprintw(input_win, 1, 1, "<edit_inst_insert_operand># ");
+        wmove(input_win, 1, strlen("<edit_inst_insert_operand># "));
+        wrefresh(input_win);
+
+        switch (instr.i_type)
+        {
+            case MOV:
+            {
+                // here we provide a clear interface for the user to type the operand in predefined format
+                // so that it will basically create it, e.g. Node structure for each operand
+                DataMovement_s* dm = malloc(sizeof(DataMovement_s));
+                dm->dest = construct_node_from_user_design_input();
+                dm->src = construct_node_from_user_design_input();
+                dm->src_bytes_to_move = construct_node_from_user_design_input();
+                instr.data = dm;
+            }
+            break;
+            case ADD:
+            case SUB:
+            case MUL:
+            case DIV:
+            {
+                Arithmetic_s* ar = malloc(sizeof(Arithmetic_s));
+                ar->dest = construct_node_from_user_design_input();
+                ar->src_size = 1;
+                ar->src = malloc(sizeof(Node) * ar->src_size);
+                ar->src[0] = construct_node_from_user_design_input();
+                instr.data = ar;
+            }
+            break;
+            case JMP:
+            {
+                Node* n = malloc(sizeof(Node));
+                *n = construct_node_from_user_design_input();   // mostly offset Node
+                instr.data = n;
+            }
+            break;
+            case RET:
+            {
+                instr.data = NULL;
+            }
+            break;
+            case CALL:
+            {
+                Call_s* call = malloc(sizeof(Call_s));
+                call->dest = construct_node_from_user_design_input();
+                // resolve function object
+                call->function->type = OBJ_OFFSET;
+                assert(call->function->type == OBJ_OFFSET);
+                call->function->object.offset = call->dest.data.offset;
+
+                // parameters Nodes, for now just one
+                call->parameters_size = 1;
+                call->parameters = malloc(sizeof(Node) * call->parameters_size);
+                call->parameters[0] = construct_node_from_user_design_input();
+                instr.data = call;
+            }
+            break;
+            case AND:
+            case OR:
+            case XOR:
+            {
+                Logical_s* log = malloc(sizeof(Logical_s));
+                log->dest = construct_node_from_user_design_input();
+                log->src = construct_node_from_user_design_input();
+                instr.data = log;
+            }
+            break;
+            case CMP:
+            {
+                Comparison_s* cmp = malloc(sizeof(Comparison_s));
+                cmp->operand_left = construct_node_from_user_design_input();
+                cmp->operand_right = construct_node_from_user_design_input();
+                //cmp->jump_instruction_type = construct_node_from_user_design_input();
+                cmp->jump_instruction_type = JZ;
+                cmp->jump_position = construct_node_from_user_design_input();
+                
+                instr.data = cmp;
+            }
+            break;
+
+            default:
+            {
+                instr.data = NULL;
+            }
+        }
+
+
+
+        insert_instruction(current_function, instr, get_instruction_index_from_offset(current_function, offset));
+    }
+    else if (strcmp(token, "delete") == 0) {
+        token = strtok(NULL, " \n");
+        if (token == NULL) return;
+        ull offset = strtoull(token, NULL, 10);
+        // delete instruction at this offset
+        int index = get_instruction_index_from_offset(current_function, offset);
+        if (index == -1) {
+            mvwprintw(main_win, 1, 1, "Instruction not found.");
+            return;
+        }
+        remove_instruction(current_function, index);
+    }
+    else if (strcmp(token, "edit") == 0) {
+        token = strtok(NULL, " \n");
+        if (token == NULL) return;
+        ull offset = strtoull(token, NULL, 10);
+        // edit instruction at this offset, now lets designing the instruction
+
+
+
+    
+    }
+    
+     else if (strcmp(token, "exit") == 0) {
+        set_mode(MODE_FUNCTION_EDIT, true); // back to function
+        return;
+    } else {
+        // Handle invalid commands
+        mvwprintw(main_win, 1, 1, "Invalid command.");
+        wrefresh(main_win);
+    }
+
+    /*
+    if (strcmp(token, "i_type") == 0) {
+            token = strtok(NULL, " \n");
+            if (token == NULL) return;
+            current_instruction->i_type = (InstructionEnum)atoi(token); // Assuming InstructionEnum can be cast from int
+        } else if (strcmp(token, "instruction_start_offset") == 0) {
+            token = strtok(NULL, " \n");
+            if (token == NULL) return;
+            current_instruction->instruction_start_offset = strtoull(token, NULL, 10);
+        } else if (strcmp(token, "dest") == 0) {
+            token = strtok(NULL, " \n");
+            if (token == NULL) return;
+            ((DataMovement_s*)(current_instruction->data))->dest.type = (NodeType)atoi(token); // Assuming NodeType can be cast from int
+        } else if (strcmp(token, "src") == 0) {
+            token = strtok(NULL, " \n");
+            if (token == NULL) return;
+            ((DataMovement_s*)(current_instruction->data))->src.type = (NodeType)atoi(token); // Assuming NodeType can be cast from int
+        }
+    */
+}
+
+
+void edit_function_instructions() {
+    char command[256];
+    int pos = 0;
+    int ch;
+
+    // Initial display
+    wclear(input_win);
+    box(input_win, 0, 0);
+    mvwprintw(input_win, 1, 1, "<edit_inst># ");
+    wmove(input_win, 1, 14);
+    wrefresh(input_win);
+
+    while (1) {
+        ch = wgetch(input_win);
+
+        if (ch == 27) { // ESC key to exit
+            break;
+        } else if (ch == '\n' || ch == KEY_ENTER) { // Enter key to process command
+            command[pos] = '\0';
+            analyze_instruction_command(command);
+            pos = 0; // Reset position for new input
+            memset(command, 0, sizeof(command)); // Clear command buffer
+
+            // Redraw input prompt after processing
+            wclear(input_win);
+            box(input_win, 0, 0);
+            mvwprintw(input_win, 1, 1, "<edit_inst># ");
+            wmove(input_win, 1, strlen("<edit_inst># "));
+            wrefresh(input_win);
+            break;
+        } else if (ch == KEY_BACKSPACE || ch == 127) { // Backspace key
+            if (pos > 0) {
+                pos--;
+                mvwdelch(input_win, 1, 14 + pos);
+                wclrtoeol(input_win);
+                wmove(input_win, 1, 14 + pos);
+            }
+        } else if (isprint(ch)) { // Printable character
+            if (pos < sizeof(command) - 1) {
+                command[pos++] = ch;
+                waddch(input_win, ch);
+            }
+        }
+        // exit
+        else if(ch == 'q') {
+            break;
+        }
+        wrefresh(input_win);
+    }
+}
+
+
+
 void init_terminal_windows()
 {
     initscr();                       // Initialize the window
@@ -707,6 +1190,18 @@ void init_terminal_windows()
     // Create the main and input windows
     main_win = newwin(parent_y - INPUT_WINDOW_HEIGHT, parent_x, 0, 0);
     input_win = newwin(INPUT_WINDOW_HEIGHT, parent_x, parent_y - INPUT_WINDOW_HEIGHT, 0);
+
+    details_win = newwin(details_win_height, parent_x, 0, 0);
+    instructions_win = newwin(parent_y - details_win_height - 1, parent_x, instructions_win_start_y, 0);
+    int registers_win_start_y, call_stack_win_start_y, memory_win_start_y, help_win_start_y, stack_win_start_y = 0;
+    registers_win = newwin(parent_y - details_win_height - 1, parent_x, registers_win_start_y, 0);
+    call_stack_win = newwin(parent_y - details_win_height - 1, parent_x, call_stack_win_start_y, 0);
+    memory_win = newwin(parent_y - details_win_height - 1, parent_x, memory_win_start_y, 0);
+    help_win = newwin(parent_y - details_win_height - 1, parent_x, help_win_start_y, 0);
+    stack_win = newwin(parent_y - details_win_height - 1, parent_x, stack_win_start_y, 0);
+
+
+
 
     // Create boxes around the windows
     box(main_win, 0, 0);
@@ -726,7 +1221,23 @@ void init_terminal_windows()
     // Main loop for capturing user input
     while (1)
     {
-        get_user_input(input_win);
+        // for the given mode
+        switch (mode) {
+            case MODE_NONE:
+                get_user_input(input_win);
+                break;
+            case MODE_PROJECT_EDIT:
+                display_project_info();
+                break;
+            case MODE_FUNCTION_EDIT:
+                //show_function_info(current_function);
+                edit_function_parameters();
+                break;
+            case MODE_INSTRUCTION_EDIT:
+                edit_function_instructions();
+                break;
+        }
+
     }
 
     cleanup();

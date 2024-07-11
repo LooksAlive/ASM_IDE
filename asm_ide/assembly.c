@@ -372,6 +372,16 @@ void insert_instruction(Function *func, const Instruction instr, unsigned int in
     adjust_addresses(func, 100); // TODO: ...
 }
 
+int get_instruction_index_from_offset(Function *func, ull offset) {
+    for (unsigned int i = 0; i < func->instructions_size; ++i)
+    {
+        if (func->instructions[i].instruction_start_offset == offset)
+        {
+            return i;
+        }
+    }
+}
+
 void remove_instruction(Function *func, unsigned int index)
 {
     if (index >= func->instructions_size)

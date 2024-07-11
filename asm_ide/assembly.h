@@ -667,6 +667,7 @@ typedef struct Function {
 void append_instruction(Function* func, const Instruction instr);
 void insert_instruction(Function* func, const Instruction instr, unsigned int index);
 void remove_instruction(Function* func, unsigned int index);
+int get_instruction_index_from_offset(Function *func, ull offset);
 void init_function(Function* func);
 
 typedef struct SizeofType {
@@ -705,7 +706,7 @@ typedef struct Node {
         ull             offset;
         SizeofType      sizeof_;
         ull structure_access;   // element access -> variable, with parent we can get to the struct;
-
+        struct Node* dereference;   // address take of this node
     } data;
 } Node;
 
@@ -731,7 +732,7 @@ typedef struct Logical_s {
 
 typedef struct Call_s {
     Node dest;
-    Function* function;
+    Object* function;
     Node* parameters;
     unsigned char parameters_size;
 } Call_s;
