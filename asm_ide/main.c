@@ -867,7 +867,6 @@ void edit_function_parameters() {
     }
 }
 
-static Node d_node; // designed node 
 Node construct_node_from_user_design_input() {
     char command[256];
     int pos = 0;
@@ -879,6 +878,8 @@ Node construct_node_from_user_design_input() {
     mvwprintw(input_win, 1, 1, "<edit_node_opcode># ");
     wmove(input_win, 1, strlen("<edit_node_opcode># "));
     wrefresh(input_win);
+
+    Node d_node;
     while (1) {
         ch = wgetch(input_win);
         if (ch == 27) { // ESC key to exit
@@ -901,7 +902,7 @@ Node construct_node_from_user_design_input() {
                         mvwprintw(input_win, 1, 1, "Invalid command.");
                         break;
                     }
-                    *d_node.data.dereference = construct_node_from_user_design_input(); // FIX THIS
+                    d_node.dereferenced = true;
                 }
                 break;
             case 's': // SIZEOF

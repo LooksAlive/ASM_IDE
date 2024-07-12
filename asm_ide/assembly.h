@@ -3,6 +3,8 @@
 
 #define _GNU_SOURCE
 
+#include <stdbool.h>
+
 #include <unistd.h>       // POSIX API: Standard symbolic constants and types
 #include <fcntl.h>        // POSIX API: File control options
 #include <sys/stat.h>     // POSIX API: File status
@@ -546,6 +548,7 @@ typedef struct Module {
 // Define a structure to represent a struct type
 typedef struct StructType {
     ObjectEnum obj_type;
+    bool is_union;
     ull offset; // actual offset on disk
     Object parent;
     char* name;
@@ -673,7 +676,9 @@ void init_function(Function* func);
 typedef struct SizeofType {
     char isBasic;   // if true use type
     BasicType basic_type;
+    bool is_sa;
     Object structure_access;   // element access -> variable, with parent we can get to the struct
+    struct Node* structure_access_node;
 } SizeofType;
 
 
@@ -698,6 +703,7 @@ typedef enum NodeType {
 
 typedef struct Node {
     NodeType type;
+    bool dereferenced;
 
     union {
         local_register  reg;
@@ -705,7 +711,7 @@ typedef struct Node {
         //Function        fun;
         ull             offset;
         SizeofType      sizeof_;
-        ull structure_access;   // element access -> variable, with parent we can get to the struct;
+        Object structure_access;   // element access -> variable, with parent we can get to the struct;
         struct Node* dereference;   // address take of this node
     } data;
 } Node;
