@@ -69,8 +69,6 @@ char* strdup(const char* str) {
     return copy;
 }
 
-
-
 void cleanup()
 {
     delwin(main_win);
@@ -129,6 +127,77 @@ void handle_sigint(int sig)
     exit(0);
 }
 
+void show_struct_info(StructType* st) {
+    // Clear the main window
+    wclear(main_win);
+    wrefresh(main_win);
+
+    int y = 1;
+    // start displaying the struct info
+    // Display the struct info in the main window
+    mvwprintw(main_win, y, 1, "Struct: ");
+    mvwprintw(main_win, y, strlen("Struct: "), st->name);
+    y++;
+    // show parent object
+    mvwprintw(main_win, y, 1, "Parent: ");
+    mvwprintw(main_win, y, strlen("Parent: "), st->parent.object.offset);
+    y++;
+    // Display the struct members in the main window
+    mvwprintw(main_win, y, 1, "Members: ");
+    
+    for (int i = 0; i < st->fields_size; i++)
+    {
+        mvwprintw(main_win, y, 1, "  %u: %s", st->fields[i].object.variable->name, st->fields[i].object.variable->vtype);
+        y++;
+    }
+    mvwprintw(main_win, y, 1, "References: ");
+
+    y++;
+    /*
+    for (int i = 0; i < st->references_children; i++)
+    {
+        mvwprintw(main_win, y, 1, "  %s: %s", st->references[i].object.variable->name, st->references[i].object.variable->vtype);
+        y++;
+    }
+    */
+
+    wrefresh(main_win);
+}
+
+void show_module_info(Module *m) {
+    // Clear the main window
+    wclear(main_win);
+    wrefresh(main_win); 
+
+    int y = 1;
+    // start displaying the module info
+    // Display the module info in the main window
+    mvwprintw(main_win, y, 1, "Module: ");
+    mvwprintw(main_win, y, strlen("Module: "), m->name);
+    y++;
+    // show parent object
+    mvwprintw(main_win, y, 1, "Parent: ");
+    mvwprintw(main_win, y, strlen("Parent: "), m->parent.object.offset);
+    y++;
+
+    // Display the module members in the main window
+    mvwprintw(main_win, y, 1, "Members: ");
+    y++;
+    for (int i = 0; i < m->fields_size; i++) {
+        mvwprintw(main_win, y, 1, "  %u: %s", m->fields[i].object.offset, m->fields[i].object.variable->vtype);
+        y++;
+    }
+    
+    wclear(main_win);
+    wrefresh(main_win);
+}
+
+
+
+
+
+
+
 char *get_instruction_name(Instruction *instr)
 {
     switch (instr->i_type)
@@ -178,21 +247,22 @@ InstructionEnum get_instruction_type_from_name(const char *name) {
     if (strcmp(name, "INT") == 0) return INT;
     if (strcmp(name, "NOP") == 0) return NOP;
     if (strcmp(name, "HLT") == 0) return HLT;
+    if (strcmp(name, "VAR") == 0) return VAR;
 
     return NONE;
 }
 
-void get_instruction_address(Instruction *instr, char *buffer) {
-
+void get_instruction_address(Instruction *instr, char *buffer, size_t buffer_size) {
     // Format the address using snprintf for safer bounds checking
-    int bytes_written = snprintf(buffer, 30, "%08lX", instr->instruction_start_offset);
+    int bytes_written = snprintf(buffer, buffer_size, "%llu", instr->instruction_start_offset);
 
     // Ensure successful formatting (optional, but recommended for robustness)
-    if (bytes_written < 0) {
-        // Handle error (e.g., return NULL)
-        return NULL;
+    if (bytes_written < 0 || bytes_written >= buffer_size) {
+        // Handle error (e.g., clear buffer or print an error message)
+        snprintf(buffer, buffer_size, "ERROR");
     }
 }
+
 
 
 int parse_instruction_address(const char *address) {
@@ -205,62 +275,60 @@ int parse_instruction_address(const char *address) {
 }
 
 // construct operands from void* data, mostly specific type e.g. DataMovement_s and then Node*
-void get_instruction_operands(Instruction *instr, char* operands)
-{
-    if(instr->data == NULL) {
-        sprintf(operands, " ");
+void get_instruction_operands(Instruction *instr, char* operands, size_t operand_size) {
+    if (instr->data == NULL) {
+        snprintf(operands, operand_size, " ");
         return;
     }
+
     size_t len = 0;
-    // switch for i_type
-    switch (instr->i_type)
-    {
+
+    switch (instr->i_type) {
     case MOV:
-    {    
+    {
         DataMovement_s *dm = (DataMovement_s *)instr->data;
-        // switch for Node* NodeType in dm attributes
-        switch (dm->dest.type)
-        {
+
+        // Process destination
+        switch (dm->dest.type) {
         case L_REG:
-            sprintf(operands, "%s,", dm->dest.data.reg.name);
+            len += snprintf(operands + len, operand_size - len, "%s,", dm->dest.data.reg.name);
             break;
         case C_VAR:
-            sprintf(operands, "%s,", dm->dest.data.var.name);
+            len += snprintf(operands + len, operand_size - len, "%s,", dm->dest.data.var.name);
             break;
         case CONSTANT:
-            sprintf(operands, "%llu,", dm->dest.data.offset);
+            len += snprintf(operands + len, operand_size - len, "%llu,", dm->dest.data.offset);
             break;
         default:
-            sprintf(operands, "UNKNOWN");
-            break;
-        }
-        // switch for Node* NodeType in dm attributes
-        switch (dm->src.type)
-        {
-        case L_REG:
-            sprintf(operands + len, "%s", dm->src.data.reg.name);
-            break;
-        case C_VAR:
-            sprintf(operands + len, "%s", dm->src.data.var.name);
-            break;
-        case CONSTANT:
-            sprintf(operands + len, "%llu", dm->src.data.offset);
-            break;
-        default:
-            sprintf(operands + len, "UNKNOWN");
-            break;
-        }
-        // switch for Node* NodeType in dm attributes --> src_bytes_to_move
-        switch (dm->src_bytes_to_move.type)
-        {
-        case CONSTANT:
-            sprintf(operands + len, ",%llu", dm->src_bytes_to_move.data.offset);
-            break;
-        default:
-            sprintf(operands + len, ",UNKNOWN");
+            len += snprintf(operands + len, operand_size - len, "UNKNOWN,");
             break;
         }
 
+        // Process source
+        switch (dm->src.type) {
+        case L_REG:
+            len += snprintf(operands + len, operand_size - len, "%s", dm->src.data.reg.name);
+            break;
+        case C_VAR:
+            len += snprintf(operands + len, operand_size - len, "%s", dm->src.data.var.name);
+            break;
+        case CONSTANT:
+            len += snprintf(operands + len, operand_size - len, "%llu", dm->src.data.offset);
+            break;
+        default:
+            len += snprintf(operands + len, operand_size - len, "UNKNOWN");
+            break;
+        }
+
+        // Process source bytes to move
+        switch (dm->src_bytes_to_move.type) {
+        case CONSTANT:
+            len += snprintf(operands + len, operand_size - len, ",%llu", dm->src_bytes_to_move.data.offset);
+            break;
+        default:
+            len += snprintf(operands + len, operand_size - len, ",UNKNOWN");
+            break;
+        }
         break;
     }
     case ADD:
@@ -269,44 +337,48 @@ void get_instruction_operands(Instruction *instr, char* operands)
     case MUL:
     {
         Arithmetic_s *arith = (Arithmetic_s *)instr->data;
-        switch (arith->dest.type)
-        {
+
+        // Process destination
+        switch (arith->dest.type) {
         case L_REG:
-            sprintf(operands, "%s", arith->dest.data.reg.name);
+            len += snprintf(operands + len, operand_size - len, "%s", arith->dest.data.reg.name);
             break;
         case C_VAR:
-            sprintf(operands, "%s", arith->dest.data.var.name);
+            len += snprintf(operands + len, operand_size - len, "%s", arith->dest.data.var.name);
             break;
         case CONSTANT:
-            sprintf(operands, "%llu", arith->dest.data.offset);
+            len += snprintf(operands + len, operand_size - len, "%llu", arith->dest.data.offset);
             break;
         default:
-            sprintf(operands, "UNKNOWN");
+            len += snprintf(operands + len, operand_size - len, "UNKNOWN");
             break;
         }
-        for (int i = 0; i < arith->src_size; i++)
-        {
-            switch (arith->src[i].type)
-            {
+
+        // Process sources
+        for (int i = 0; i < arith->src_size; i++) {
+            switch (arith->src[i].type) {
             case L_REG:
-                sprintf(operands + len, ",%s", arith->src[i].data.reg.name);
+                len += snprintf(operands + len, operand_size - len, ",%s", arith->src[i].data.reg.name);
                 break;
             case C_VAR:
-                sprintf(operands + len, ",%s", arith->src[i].data.var.name);
+                len += snprintf(operands + len, operand_size - len, ",%s", arith->src[i].data.var.name);
                 break;
             case CONSTANT:
-                sprintf(operands + len, ",%llu", arith->src[i].data.offset);
+                len += snprintf(operands + len, operand_size - len, ",%llu", arith->src[i].data.offset);
                 break;
             default:
-                sprintf(operands + len, ",UNKNOWN");
+                len += snprintf(operands + len, operand_size - len, ",UNKNOWN");
                 break;
             }
         }
         break;
     }
-    break;
     }
+
+    // Ensure null termination
+    operands[operand_size - 1] = '\0';
 }
+
 
 void parse_instruction_operands(const char *operands_str, Instruction *instr) {
     // Example for MOV instruction
@@ -396,9 +468,9 @@ void display_instructions(WINDOW *win, Function *func) {
     for (ull i = 0; i < func->instructions_size; i++) {
         Instruction *instr = &func->instructions[i];
         char addr[30];
-        get_instruction_address(instr, addr);
-        char operands[300];
-        get_instruction_operands(instr, operands);
+        get_instruction_address(instr, addr, sizeof(addr));
+        char operands[1024];
+        get_instruction_operands(instr, operands, sizeof(operands));
         mvwprintw(win, i + 2, 1, "%-10s %-15s %-10s", addr, get_instruction_name(instr), operands);
     }
 
@@ -662,6 +734,7 @@ void analyze_user_input(char *input)
                     // add main function
                     p.main_function.object.function = create_function(&p, "main");
                     p.main_function.type = OBJ_FUNCTION;
+                    current_function = p.main_function.object.function;
 
                     wclear(main_win);
                     mvwprintw(main_win, 1, 1, "Main function added.");
@@ -682,6 +755,18 @@ void analyze_user_input(char *input)
         {
             // Handle "structure" keyword
         }
+        else if (strcmp(token, "sp") == 0) {
+            goto show_project;
+        }
+        else if (strcmp(token, "sf") == 0) {
+            goto show_function;
+        }
+        else if (strcmp(token, "ei") == 0) {
+            if(current_function != NULL) {
+                show_function_info(current_function);
+                set_mode(MODE_INSTRUCTION_EDIT, true);
+            }
+        }
         else if (strcmp(token, kw_show) == 0)
         {
             // Handle "show" keyword
@@ -691,6 +776,7 @@ void analyze_user_input(char *input)
             {
                 // Handle "show project" keyword
                 token = strtok(NULL, " \n\0");
+show_project:
                 if (&p == 0)
                 {
                     // error message to main_win
@@ -705,7 +791,14 @@ void analyze_user_input(char *input)
             // function 
             else if (strcmp(token, kw_function) == 0) {
                 // Handle "show function" keyword
+show_function:
                 token = strtok(NULL, " \n\0");
+                if(token == NULL) {
+                    if(current_function != NULL) {
+                        show_function_info(current_function);
+                        return;
+                    }
+                }
                 if (strcmp(token, kw_main) == 0) {
                     // Handle "show function main" keyword
                     //display_function_info(p.main_function);
@@ -729,12 +822,16 @@ void analyze_user_input(char *input)
                 }
             }
         }
+        else if (strcmp(token, "ef") == 0) {
+            goto edit_function;
+        }
         else if (strcmp(token, kw_edit) == 0)
         {
             // Handle "edit" keyword
             token = strtok(NULL, " \n\0");
             if (strcmp(token, kw_function) == 0) {
                 token = strtok(NULL, " \n\0");
+edit_function:
                 if(current_function == NULL) {
                     wclear(main_win);
                     mvwprintw(main_win, 1, 1, "No function loaded.");
@@ -752,7 +849,36 @@ void analyze_user_input(char *input)
             // Handle "set" keyword
         }
         else if (strcmp(token, kw_delete) == 0) {
-
+            // Handle "delete" keyword
+            token = strtok(NULL, " \n\0");
+            if (strcmp(token, kw_function) == 0) {
+                // Handle "delete function" keyword
+                token = strtok(NULL, " \n\0");
+                if (strcmp(token, kw_main) == 0) {
+                    // Handle "delete function main" keyword
+                    if(p.main_function.object.function == NULL) {
+                        wclear(main_win);
+                    }
+                }
+                else {
+                    mvwprintw(main_win, 1, 1, "NOT IMPLEMENTED.");
+                    return;
+                    // get function ull offset, read it and display
+                    ull offset;
+                    // from token convert ull string to number
+                    offset = strtoull(token, NULL, 16);
+                    Function* fun = deserialize_function(&p, offset);
+                    if(fun == NULL) {
+                        wclear(main_win);
+                        mvwprintw(main_win, 1, 1, "Function not found.");
+                        wrefresh(main_win);
+                    }
+                    else {
+                        // delete function
+                        //delete_function(fun);
+                    }
+                }
+            }
         }
         else if (strcmp(token, kw_exit) == 0) {
             clean_project(&p);
@@ -804,10 +930,13 @@ void analyze_command(char *command) {
             show_function_info(current_function);
         }
     }
+    else if (strcmp(token, "ei") == 0) {
+        set_mode(MODE_INSTRUCTION_EDIT, true);
+    }
     // edit instructions
     else if (strcmp(token, "edit") == 0) {
         token = strtok(NULL, " \n\0");
-        if (strcmp(token, "instruction") == 0) {
+        if (strcmp(token, "instructions") == 0) {
             token = strtok(NULL, " \n");
             set_mode(MODE_INSTRUCTION_EDIT, true);
         }
@@ -835,6 +964,7 @@ void edit_function_parameters() {
         ch = wgetch(input_win);
 
         if (ch == 27) { // ESC key to exit
+            set_mode(MODE_NONE, true);
             break;
         } else if (ch == '\n' || ch == KEY_ENTER) { // Enter key to process command
             command[pos] = '\0';
@@ -867,6 +997,84 @@ void edit_function_parameters() {
     }
 }
 
+// function that works on input_win returning user input after enter or \n
+char *get_input_from_user(char* display_string) {
+    char* command = malloc(sizeof(char) * 256);
+    int pos = 0;
+    int ch;
+    // Initial display
+    wclear(input_win);
+    box(input_win, 0, 0);
+    mvwprintw(input_win, 1, 1, display_string);
+    wmove(input_win, 1, strlen(display_string));
+    wrefresh(input_win);
+
+    while (1) {
+        ch = wgetch(input_win);
+        if (ch == 27) { // ESC key to exit
+            break;
+        }
+        else if (ch == '\n' || ch == KEY_ENTER) { // Enter key to process command
+            command[pos] = '\0';
+            //pos = 0; // Reset position for new input
+            return command;
+        }
+        else if (ch == KEY_BACKSPACE || ch == 127) { // Backspace key
+        if (pos > 0) {
+                pos--;
+                mvwdelch(input_win, 1, 1 + pos);
+                wclrtoeol(input_win);
+                wmove(input_win, 1, 1 + pos);
+            }
+        }
+        else if (isprint(ch)) { // Printable character
+            if (pos < sizeof(command) - 1) {
+                command[pos++] = ch;
+                waddch(input_win, ch);
+            }
+        }
+        wrefresh(input_win);
+    }
+    return NULL;
+}
+
+
+Type *get_type_from_user() {
+    char command[256];
+    int pos = 0;
+    int ch;
+    // Initial display
+    wclear(input_win);
+    box(input_win, 0, 0);
+    mvwprintw(input_win, 1, 1, "<edit_type># ");
+    wmove(input_win, 1, strlen("<edit_type># "));
+    wrefresh(input_win);
+    while (1) {
+        ch = wgetch(input_win);
+        if (ch == 27) { // ESC key to exit
+            break;
+        } else if (ch == '\n' || ch == KEY_ENTER) { // Enter key to process command
+            command[pos] = '\0';
+            //pos = 0; // Reset position for new input
+            //return get_type_from_string(command);
+        } else if (ch == KEY_BACKSPACE || ch == 127) { // Backspace key
+            if (pos > 0) {
+                pos--;
+                mvwdelch(input_win, 1, 1 + pos);
+                wclrtoeol(input_win);
+                wmove(input_win, 1, 1 + pos);
+            }
+        } else if (isprint(ch)) { // Printable character
+            if (pos < sizeof(command) - 1) {
+                command[pos++] = ch;
+                waddch(input_win, ch);
+            }
+            wrefresh(input_win);
+        }
+    }
+}
+
+
 Node construct_node_from_user_design_input() {
     char command[256];
     int pos = 0;
@@ -875,53 +1083,152 @@ Node construct_node_from_user_design_input() {
     // Initial display
     wclear(input_win);
     box(input_win, 0, 0);
-    mvwprintw(input_win, 1, 1, "<edit_node_opcode># ");
-    wmove(input_win, 1, strlen("<edit_node_opcode># "));
+    mvwprintw(input_win, 1, 1, "<edit_node_opearand># ");
+    wmove(input_win, 1, strlen("<edit_node_opearand># "));
     wrefresh(input_win);
 
     Node d_node;
-    while (1) {
-        ch = wgetch(input_win);
-        if (ch == 27) { // ESC key to exit
-            break;
-        }
-        // here we catch specific keys where each key will represent enum type we set to node: NodeType
-        switch(ch) {
-            case 'c':   // offset
-                d_node.type = CONSTANT;
-                break;
-            case 'v': // L_VAR
-                d_node.type = L_VAR;
-                break;
-            case 'd': // DEREFERENCE
-                d_node.type = DEREFERENCE;
-                // .data will become another Node*
-                {
-                    char *token = strtok(NULL, " \n\0");
-                    if (token == NULL) {
-                        mvwprintw(input_win, 1, 1, "Invalid command.");
-                        break;
-                    }
-                    d_node.dereferenced = true;
-                }
-                break;
-            case 's': // SIZEOF
-                d_node.type = SIZEOF;
-                break;
-            case 'o': // STRUCTOFFSET
-                d_node.type = STRUCTOFFSET;
-                break;
-            case 'r': // L_REG
-                d_node.type = L_REG;
-                break;
-            default:
-                break;            
-        }
+    d_node.type = NODE_TYPE_NONE;
+
+    ch = wgetch(input_win);
+    if (ch == 27) { // ESC key to exit
+        return d_node;
     }
+    // here we catch specific keys where each key will represent enum type we set to node: NodeType
+    switch(ch) {
+        case 'c':   // offset
+            d_node.type = CONSTANT;
+            {
+                // record input from user
+                // get_input_from_user(command);
+                char* input = get_input_from_user("<edit_node_opearand_constant># ");
+                if (input == NULL) {
+                    mvwprintw(input_win, 1, 1, "Invalid command.");
+                    break;
+                }
+                // convert to ull
+                d_node.data.offset = strtoull(input, NULL, 10);
+                free(input);
+            }
+            break;
+        case 't': // TYPE
+            d_node.type = TYPE;
+        {
+            // record input from user
+            // get_input_from_user(command);
+            char* input = get_input_from_user("<edit_node_opearand_type># ");
+            if (input == NULL) {
+                mvwprintw(input_win, 1, 1, "Invalid command.");
+                break;
+            }
+            // convert to ull
+            d_node.data.offset = strtoull(input, NULL, 10);
+            free(input);
+        }
+        case 'l': // L_VAR
+            d_node.type = L_VAR;
+            {
+                // record input from user
+                // get_input_from_user(command);
+                char* input = get_input_from_user("<edit_node_opearand_l_var># ");
+                if (input == NULL) {
+                    mvwprintw(input_win, 1, 1, "Invalid command.");
+                    break;
+                }
+                // convert to ull
+                d_node.data.offset = strtoull(input, NULL, 10);
+                free(input);
+            }
+            break;
+        case 'g': // G_VAR
+            d_node.type = L_VAR;
+            {
+                // record input from user
+                // get_input_from_user(command);
+                char* input = get_input_from_user("<edit_node_opearand_g_var># ");
+                if (input == NULL) {
+                    mvwprintw(input_win, 1, 1, "Invalid command.");
+                    break;
+                }
+                // convert to ull
+                d_node.data.offset = strtoull(input, NULL, 10);
+                free(input);
+            }
+            break;
+        case 'd': // DEREFERENCE
+            d_node.type = DEREFERENCE;
+            // .data will become another Node*
+            {
+                d_node.type = DEREFERENCE;
+                *d_node.data.dereference = construct_node_from_user_design_input();
+            }
+            break;
+        case 's': // SIZEOF
+            d_node.type = SIZEOF;
+            {
+                // record input from user
+                // get_input_from_user(command);
+                char* input = get_input_from_user("<edit_node_opearand_sizeof># ");
+                if (input == NULL) {
+                    mvwprintw(input_win, 1, 1, "Invalid command.");
+                    break;
+                }
+                // convert to ull
+                if(isdigit(input[0])) {
+                    d_node.data.offset = strtoull(input, NULL, 10);
+                } else {
+                    d_node.data.var; //get_lvar_from_name(&p, input);
+                }
+                free(input);
+            }
+            break;
+        case 'o': // STRUCTOFFSET
+            d_node.type = STRUCTOFFSET;
+            {
+                // record input from user
+                // get_input_from_user(command);
+                char* input = get_input_from_user("<edit_node_opearand_structoffset># ");
+                if (input == NULL) {
+                    mvwprintw(input_win, 1, 1, "Invalid command.");
+                    break;
+                }
+                // convert to ull
+                d_node.data.offset = strtoull(input, NULL, 10);
+                free(input);
+            }
+            break;
+        case 'r': // L_REG
+            d_node.type = L_REG;
+            {
+                // record input from user
+                // get_input_from_user(command);
+                char* input = get_input_from_user("<edit_node_opearand_l_reg># ");
+                if (input == NULL) {
+                    mvwprintw(input_win, 1, 1, "Invalid command.");
+                    break;
+                }
+                // convert to ull
+                d_node.data.offset = strtoull(input, NULL, 10);
+                free(input);
+            }
+            break;
+        default:
+            break;            
+    }
+
+    wclear(input_win);
+    box(input_win, 0, 0);
+    mvwprintw(input_win, 1, 1, "<edit_node_opearand># ");
+    wmove(input_win, 1, strlen("<edit_node_opearand># "));
+    wrefresh(input_win);
 
     return d_node;
 }
 
+Type resolve_user_typed_type(const char* str) {
+    Type t;
+    return t;
+}
 
 void analyze_instruction_command(char *command) {
     char *token = strtok(command, " \n");
@@ -972,15 +1279,16 @@ void analyze_instruction_command(char *command) {
             }
             wrefresh(input_win);
         }
-
-        instr.i_type = get_instruction_type_from_name(opcode);
-        free(opcode);
-        
+        /*
         wclear(input_win);
         //box(input_win, 0, 0);
         mvwprintw(input_win, 1, 1, "<edit_inst_insert_operand># ");
-        wmove(input_win, 1, strlen("<edit_inst_insert_operand># "));
+        mvwprintw(input_win, 1, strlen("<edit_inst_insert_operand># "), "%s", token);
+        wmove(input_win, 1, strlen("<edit_inst_insert_operand># ") + strlen(token));
         wrefresh(input_win);
+        */
+        instr.i_type = get_instruction_type_from_name(opcode);
+        free(opcode);
 
         switch (instr.i_type)
         {
@@ -1058,18 +1366,27 @@ void analyze_instruction_command(char *command) {
                 instr.data = cmp;
             }
             break;
+            case VAR:
+            {
+                // LocalVariable
+                LocalVariable* lv = malloc(sizeof(LocalVariable));
+                lv->type = resolve_user_typed_type(get_input_from_user("xxx"));
+                lv->name = get_input_from_user("name: ");
+                
+
+                instr.data = lv;
+            }
 
             default:
             {
-                instr.data = NULL;
+                // error
+                printf("Error: Unknown instruction type.\n");
             }
         }
 
-
-
         insert_instruction(current_function, instr, get_instruction_index_from_offset(current_function, offset));
     }
-    else if (strcmp(token, "delete") == 0) {
+    else if (strcmp(token, "delete") == 0 || strcmp(token, "d") == 0) {
         token = strtok(NULL, " \n");
         if (token == NULL) return;
         ull offset = strtoull(token, NULL, 10);
@@ -1081,18 +1398,14 @@ void analyze_instruction_command(char *command) {
         }
         remove_instruction(current_function, index);
     }
-    else if (strcmp(token, "edit") == 0) {
+    else if (strcmp(token, "edit") == 0 || strcmp(token, "e") == 0) {
         token = strtok(NULL, " \n");
         if (token == NULL) return;
         ull offset = strtoull(token, NULL, 10);
         // edit instruction at this offset, now lets designing the instruction
-
-
-
-    
     }
     
-     else if (strcmp(token, "exit") == 0) {
+     else if (strcmp(token, "exit") == 0 || strcmp(token, "q") == 0) {
         set_mode(MODE_FUNCTION_EDIT, true); // back to function
         return;
     } else {
@@ -1100,26 +1413,6 @@ void analyze_instruction_command(char *command) {
         mvwprintw(main_win, 1, 1, "Invalid command.");
         wrefresh(main_win);
     }
-
-    /*
-    if (strcmp(token, "i_type") == 0) {
-            token = strtok(NULL, " \n");
-            if (token == NULL) return;
-            current_instruction->i_type = (InstructionEnum)atoi(token); // Assuming InstructionEnum can be cast from int
-        } else if (strcmp(token, "instruction_start_offset") == 0) {
-            token = strtok(NULL, " \n");
-            if (token == NULL) return;
-            current_instruction->instruction_start_offset = strtoull(token, NULL, 10);
-        } else if (strcmp(token, "dest") == 0) {
-            token = strtok(NULL, " \n");
-            if (token == NULL) return;
-            ((DataMovement_s*)(current_instruction->data))->dest.type = (NodeType)atoi(token); // Assuming NodeType can be cast from int
-        } else if (strcmp(token, "src") == 0) {
-            token = strtok(NULL, " \n");
-            if (token == NULL) return;
-            ((DataMovement_s*)(current_instruction->data))->src.type = (NodeType)atoi(token); // Assuming NodeType can be cast from int
-        }
-    */
 }
 
 
@@ -1139,6 +1432,7 @@ void edit_function_instructions() {
         ch = wgetch(input_win);
 
         if (ch == 27) { // ESC key to exit
+            set_mode(MODE_FUNCTION_EDIT, true);
             break;
         } else if (ch == '\n' || ch == KEY_ENTER) { // Enter key to process command
             command[pos] = '\0';
@@ -1172,6 +1466,7 @@ void edit_function_instructions() {
         }
         wrefresh(input_win);
     }
+    show_function_info(current_function);
 }
 
 
@@ -1256,6 +1551,8 @@ int main()
     current_function = &f;
 
     init_terminal_windows();
+
+    //serialize_project(&p, "test/project.bin");
 
     clean_project(&p);
 

@@ -511,8 +511,9 @@ typedef struct Object {
     } object;
 } Object;
 
-typedef enum BasicType {
+typedef enum AtomicType {
     BASIC_TYPE_INT,
+    BASIC_TYPE_VOID,
     BASIC_TYPE_FLOAT,
     BASIC_TYPE_DOUBLE,
     BASIC_TYPE_CHAR,
@@ -523,8 +524,61 @@ typedef enum BasicType {
     BASIC_TYPE_UNSIGNED_CHAR,
     BASIC_TYPE_POINTER,
     BASIC_TYPE_STRUCT,
-    BASIC_TYPE_LONG
-} BasicType;
+    BASIC_TYPE_LONG,
+    BASIC_TYPE_NONE
+} AtomicType;
+
+char* atomic_type_to_string(AtomicType at);
+
+typedef enum TypeEnum {
+    TYPE_NONE,
+    TYPE_POINTER,
+    TYPE_ARRAY,
+    TYPE_ENTITY,
+    TYPE_FUNCTION,
+    TYPE_ATOMIC
+} TypeEnum;
+
+typedef struct PointerType {
+    struct Type* points_to;
+    size_t pointer_level;
+} PointerType;
+
+char* pointer_type_to_string(PointerType* pt);
+
+char* entity_type_to_string(Object* et);
+
+typedef struct ArrayType {
+    struct Type* basic_type;
+    size_t array_size;
+} ArrayType;
+
+char* array_type_to_string(ArrayType* at);
+
+typedef struct FunctionType {
+    ObjectEnum obj_type;
+    Object object;
+    struct Type* return_type;
+    struct Type* parameters;
+    size_t parameters_size;
+} FunctionType;
+
+char* function_type_to_string(FunctionType* ft);
+
+
+// basic structure for a type
+typedef struct Type {
+    TypeEnum type_kind;
+    union {
+        PointerType pointer;
+        ArrayType array;
+        Object entity;  // struct, enum, ...
+        FunctionType function;
+        AtomicType atomic;
+    } type;
+} Type;
+
+char* type_to_string(Type* t);
 
 
 // all have size 8 bytes == 64 bits
@@ -542,6 +596,8 @@ typedef struct Module {
     char* name;
     Object* fields; // mostly Variable*  TODO: * or **
     size_t fields_size;
+
+    bool changed;   // if we need to serialize or not.
 } Module;
 
 
@@ -573,7 +629,7 @@ typedef struct StructType {
     Object* references_children_parents;
     size_t references_children_parents_size;
 
-
+    bool changed;   // if we need to serialize or not.
 } StructType;
 
 // structure that will represent enum
@@ -590,6 +646,7 @@ typedef struct EnumType {
     Object* references_children;
     size_t references_size;
 
+    bool changed;   // if we need to serialize or not.
 } EnumType;
 
 
@@ -616,7 +673,7 @@ typedef enum ObjectVisibility {
 
 } ObjectVisibility;
 
-// Define a structure to represent a variable
+// global variable
 typedef struct Variable {
     ObjectEnum obj_type;
     ull offset; // actual offset on disk
@@ -630,7 +687,7 @@ typedef struct Variable {
         STRUCT_TYPE_VARIABLE
     } vtype;
     union {
-        BasicType type;
+        AtomicType type;
         StructType* struct_type; // If the variable is of struct type
     } data;
 
@@ -643,7 +700,24 @@ typedef struct Variable {
     // references ull to child offsets variables
     Object* references;
     size_t references_size;
+
+    bool changed;   // if we need to serialize or not.
 } Variable;
+
+// local variable on stack.
+typedef struct LocalVariable {
+    ull offset;
+    char* name;
+    Type type;
+    ull address;    // actual address where it is in memory
+    bool is_constant;
+    bool is_parameter;
+    VariableValue value;
+} LocalVariable;
+
+LocalVariable* get_lvar_from_name(struct Project* p, char* name);
+
+
 
 typedef struct Parameter {
     Variable* variable; // this is not Object because it will always be resolved as variables, not using ull offset here, never.
@@ -665,6 +739,8 @@ typedef struct Function {
 
     Object  references;     // to calls, usages
     ull     references_size;
+
+    bool changed;   // if we need to serialize or not.
 } Function;
 
 void append_instruction(Function* func, const Instruction instr);
@@ -675,7 +751,7 @@ void init_function(Function* func);
 
 typedef struct SizeofType {
     char isBasic;   // if true use type
-    BasicType basic_type;
+    AtomicType basic_type;
     bool is_sa;
     Object structure_access;   // element access -> variable, with parent we can get to the struct
     struct Node* structure_access_node;
@@ -689,6 +765,7 @@ typedef struct SizeofType {
 typedef enum NodeType {
     L_REG,
     C_VAR,
+    TYPE,
 
     L_VAR,
     G_VAR,
@@ -703,7 +780,6 @@ typedef enum NodeType {
 
 typedef struct Node {
     NodeType type;
-    bool dereferenced;
 
     union {
         local_register  reg;
@@ -712,6 +788,7 @@ typedef struct Node {
         ull             offset;
         SizeofType      sizeof_;
         Object structure_access;   // element access -> variable, with parent we can get to the struct;
+        Type type;
         struct Node* dereference;   // address take of this node
     } data;
 } Node;
@@ -759,6 +836,10 @@ typedef struct Comparison_s {
     InstructionEnum jump_instruction_type;  // JZ,JG,JL, ...
     Node jump_position;
 } Comparison_s;
+
+typedef struct Jump_s {
+    Node jump_position;
+} Jump_s;
 
 
 
@@ -817,6 +898,7 @@ void init_project(Project* proj, const char* project_name);
 void clean_project(Project* proj);
 void serialize_project(Project* proj, const char* filename);
 void deserialize_project(Project* proj, const char* filename);
+
 
 
 void memory_read(stack* s, size_t src, void* buffer, size_t size);

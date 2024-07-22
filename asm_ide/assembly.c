@@ -1,5 +1,14 @@
 #include "assembly.h"
 
+
+
+/*
+LocalVariable* get_lvar_from_name(struct Project* p, char* name) {
+    return NULL;
+}
+*/
+
+
 void add_free_space_range(Project *p, const Range range)
 {
     // Add range to free space file
@@ -153,6 +162,32 @@ void serialize_project(Project *proj, const char *filename)
     fwrite(&proj->last_offset, sizeof(ull), 1, file);
 
     fclose(file);
+
+
+    // save all its components
+    /*
+    for(int i=0; i< proj->opened_objects_size; i++) {
+        switch(proj->opened_objects[i]->type) {
+            case OBJ_FUNCTION:
+                {
+                    if(proj->opened_objects[i]->object.function->changed) {
+                        serialize_function(proj, proj->opened_objects[i], "no path");
+                    }
+                }
+                break;
+            case OBJ_VARIABLE:
+                serialize_variable(proj, proj->opened_objects[i]);
+                break;
+            case OBJ_STRUCT:
+                serialize_struct(proj, proj->opened_objects[i]);
+                break;
+            case OBJ_ENUM:
+                serialize_enum(proj, proj->opened_objects[i]);
+                break;
+        }
+    }
+    */
+
 }
 
 void deserialize_project(Project *proj, const char *filename)
@@ -253,7 +288,7 @@ void memory_write(stack *s, size_t dest, void *src, size_t size)
     }
 }
 
-ull getInstructionSize(const Instruction *instr)
+size_t getInstructionSize(const Instruction *instr)
 {
     size_t size = 0;
     size += sizeof(instr->i_type);
@@ -265,9 +300,25 @@ ull getInstructionSize(const Instruction *instr)
         size += serialize_Node(&((DataMovement_s *)(instr->data))->dest, buffer);
         size += serialize_Node(&((DataMovement_s *)(instr->data))->src, buffer);
         size += sizeof(((DataMovement_s *)(instr->data))->src_bytes_to_move);
+    
+    case RET:
+        size += sizeof(InstructionEnum);    // only instruction, no operands    
+
+    case JMP:
+        size += serialize_Node(&((Jump_s *)(instr->data))->jump_position, buffer);
+
+    case CALL:
+        size += serialize_Node(&((Call_s *)(instr->data))->dest, buffer);
+        // ull offset of function
+        size += sizeof(((Call_s *)(instr->data))->function->object.offset);
+        
+
     }
+    
 
     free(buffer);
+
+    return size;
 }
 
 void append_instruction(Function *func, const Instruction instr)
@@ -289,13 +340,14 @@ void append_instruction(Function *func, const Instruction instr)
     func->instructions[func->instructions_size - 1] = instr;
 }
 
-void adjust_addresses(Function *func, ull code_start_offset)
+void adjust_addresses(Function *func, ull code_start_offset /* where in function instructions starts */)
 {
     ull *to_update[50];
     char num_to_update = 0;
-
-    short isize = getInstructionSize(&func->instructions[0]);
-    func->instructions[0].instruction_start_offset = isize + code_start_offset;
+    //char buffer[256];
+    //size_t isize = serialize_Instruction(&func->instructions[0], buffer);
+    size_t isize = getInstructionSize(&func->instructions[0]);
+    func->instructions[0].instruction_start_offset = code_start_offset;
 
     for (unsigned int i = 1; i < func->instructions_size; ++i)
     {
@@ -347,92 +399,6 @@ void adjust_addresses(Function *func, ull code_start_offset)
     }
 }
 
-void insert_instruction(Function *func, const Instruction instr, unsigned int index)
-{
-    if (index > func->instructions_size)
-    {
-        fprintf(stderr, "Index out of bounds for inserting instruction.\n");
-        return;
-    }
-
-    func->instructions_size++;
-    func->instructions = realloc(func->instructions, func->instructions_size * sizeof(Instruction));
-
-    if (func->instructions == NULL)
-    {
-        fprintf(stderr, "Failed to allocate memory for instructions.\n");
-        exit(EXIT_FAILURE);
-    }
-
-    memmove(&func->instructions[index + 1], &func->instructions[index],
-            (func->instructions_size - index - 1) * sizeof(Instruction));
-
-    func->instructions[index] = instr;
-
-    adjust_addresses(func, 100); // TODO: ...
-}
-
-int get_instruction_index_from_offset(Function *func, ull offset) {
-    for (unsigned int i = 0; i < func->instructions_size; ++i)
-    {
-        if (func->instructions[i].instruction_start_offset == offset)
-        {
-            return i;
-        }
-    }
-}
-
-void remove_instruction(Function *func, unsigned int index)
-{
-    if (index >= func->instructions_size)
-    {
-        fprintf(stderr, "Error: Invalid index to remove instruction: %u\n", index);
-        return;
-    }
-
-    for (unsigned int i = index; i < func->instructions_size - 1; ++i)
-    {
-        func->instructions[i] = func->instructions[i + 1];
-    }
-
-    func->instructions_size--;
-    func->instructions = realloc(func->instructions, func->instructions_size * sizeof(Instruction));
-
-    if (func->instructions == NULL && func->instructions_size > 0)
-    {
-        fprintf(stderr, "Error: Failed to reallocate memory for instructions.\n");
-        exit(EXIT_FAILURE);
-    }
-
-    adjust_addresses(func, 100);
-}
-
-void init_function(Function *func)
-{
-    if (func == NULL)
-    {
-        return;
-    }
-
-    func->offset = 0; // p.last_offset;
-    func->visibility = 0;
-    func->name = NULL;
-    func->parameters = NULL;
-    func->param_count = 0;
-    // func->local_variables = NULL;
-    // func->local_var_count = 0;
-    func->references.type = OBJ_NONE;
-    func->references_size = 0;
-    func->visibility = PUBLIC;
-
-    func->instructions = malloc(sizeof(Instruction));
-    // set RET instruction
-    func->instructions[0].i_type = RET;
-    func->instructions[0].data = NULL;
-    func->instructions[0].instruction_start_offset = 0;
-    func->instructions_size = 1;
-}
-
 // calculate the size of a function
 size_t get_function_size(Function *func)
 {
@@ -462,11 +428,117 @@ size_t get_function_instructions_start_offset(Function *func) {
     size += sizeof(func->obj_type);
     size += sizeof(func->offset);
     size += sizeof(func->visibility);
-    size += strlen(func->name) + 1;
-    size += sizeof(func->param_count);
+    if(func->name != NULL) {
+        size += strlen(func->name) + 1;
+    }
+    //size += sizeof(func->param_count);
     size += sizeof(ull) * func->param_count;
-    size += sizeof(func->instructions);
     size += sizeof(func->instructions_size);
+    //size += sizeof(func->instructions);
+
+    return size;
+}
+
+void insert_instruction(Function *func, const Instruction instr, unsigned int index)
+{
+    if (index > func->instructions_size)
+    {
+        fprintf(stderr, "Index out of bounds for inserting instruction.\n");
+        return;
+    }
+
+    func->instructions_size++;
+    func->instructions = realloc(func->instructions, func->instructions_size * sizeof(Instruction));
+
+    if (func->instructions == NULL)
+    {
+        fprintf(stderr, "Failed to allocate memory for instructions.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    memmove(&func->instructions[index + 1], &func->instructions[index],
+            (func->instructions_size - index - 1) * sizeof(Instruction));
+
+    func->instructions[index] = instr;
+
+    adjust_addresses(func, get_function_instructions_start_offset(func));
+}
+
+int get_instruction_index_from_offset(Function *func, ull offset) {
+    unsigned int closest_index = 0;
+    unsigned int min_difference = UINT_MAX;
+
+    for (unsigned int i = 0; i < func->instructions_size; ++i)
+    {
+        unsigned int difference = (func->instructions[i].instruction_start_offset > offset) ?
+            (func->instructions[i].instruction_start_offset - offset) :
+            (offset - func->instructions[i].instruction_start_offset);
+
+        if (difference < min_difference)
+        {
+            min_difference = difference;
+            closest_index = i;
+        }
+
+        if (func->instructions[i].instruction_start_offset == offset)
+        {
+            return i;
+        }
+    }
+
+    return closest_index;    
+}
+
+void remove_instruction(Function *func, unsigned int index)
+{
+    if (index >= func->instructions_size)
+    {
+        fprintf(stderr, "Error: Invalid index to remove instruction: %u\n", index);
+        return;
+    }
+
+    for (unsigned int i = index; i < func->instructions_size - 1; ++i)
+    {
+        func->instructions[i] = func->instructions[i + 1];
+    }
+
+    func->instructions_size--;
+    func->instructions = realloc(func->instructions, func->instructions_size * sizeof(Instruction));
+
+    if (func->instructions == NULL && func->instructions_size > 0)
+    {
+        fprintf(stderr, "Error: Failed to reallocate memory for instructions.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    adjust_addresses(func, get_function_instructions_start_offset(func));
+}
+
+void init_function(Function *func)
+{
+    if (func == NULL)
+    {
+        return;
+    }
+
+    func->offset = 0; // p.last_offset;
+    func->visibility = 0;
+    //func->name = malloc(1);
+    func->name = NULL;
+    func->parameters = NULL;
+    func->param_count = 0;
+    // func->local_variables = NULL;
+    // func->local_var_count = 0;
+    func->references.type = OBJ_NONE;
+    func->references_size = 0;
+    func->visibility = PUBLIC;
+
+    func->instructions = malloc(sizeof(Instruction));
+    // set RET instruction
+    func->instructions[0].i_type = RET;
+    func->instructions[0].data = NULL;
+    func->instructions[0].instruction_start_offset = get_function_instructions_start_offset(func);
+    func->instructions_size = 1;
 }
 
 void project_add_opened_object(Project *p, Object *obj) {
@@ -550,12 +622,112 @@ size_t serialize_Instruction(const Instruction *instr, unsigned char *buffer)
         size += sizeof(mov_data->src_bytes_to_move);
         break;
     }
+    case RET:
+        size += sizeof(InstructionEnum);    // only instruction, no operands    
     default:
         fprintf(stderr, "Unsupported InstructionEnum type: %d\n", instr->i_type);
         return 0; // Return 0 to indicate failure
     }
 
     return size;
+}
+
+char* atomic_type_to_string(AtomicType at)
+{
+    switch (at) {
+        case BASIC_TYPE_VOID:
+            return "void";
+        case BASIC_TYPE_CHAR:
+            return "char";
+        case BASIC_TYPE_SHORT:
+            return "short";
+        case BASIC_TYPE_INT:
+            return "int";
+        case BASIC_TYPE_LONG:
+            return "long";
+        case BASIC_TYPE_FLOAT:
+            return "float";
+        case BASIC_TYPE_DOUBLE:
+            return "double";
+        case BASIC_TYPE_POINTER:
+            return "pointer";
+        default:
+            return "NOT IMPLEMENTED TYPE";
+    }
+}
+
+char *pointer_type_to_string(PointerType *pt)
+{
+    char buffer[256];
+    buffer[0] = '0';
+
+    strcat(buffer, "*");
+    strcat(buffer, type_to_string(pt->points_to));
+
+    return buffer;
+}
+
+char *entity_type_to_string(Object *et)
+{
+    switch (et->type)
+    {
+    case OBJ_ENUM:
+        return et->object.enum_type->name;
+    case OBJ_STRUCT:
+        return et->object.struct_type->name;
+    /*
+    case OBJ_FUNCTION:
+        return et->object.function->name;
+    case OBJ_VARIABLE:
+        return et->object.variable->name;
+    */
+    default:
+        break;
+    }
+}
+
+char *array_type_to_string(ArrayType *at)
+{
+    char buffer[256];
+    buffer[0] = '0';
+    strcat(buffer, "[");
+    strcat(buffer, type_to_string(at->basic_type));
+    strcat(buffer, "]");
+    return buffer;
+}
+
+char *function_type_to_string(FunctionType *ft)
+{
+    return NULL;
+}
+
+char *type_to_string(Type *t)
+{
+    char buffer[256];
+    buffer[0] = '\0';  // Initialize buffer to empty string
+
+    switch (t->type_kind)
+    {
+    case TYPE_NONE:
+        return "NONE";
+    case TYPE_ATOMIC:
+        strcat(buffer, atomic_type_to_string(t->type.atomic));
+        break;
+    case TYPE_ARRAY:
+        strcat(buffer, array_type_to_string(&t->type.array));
+        break;
+    case TYPE_POINTER:
+        strcat(buffer, pointer_type_to_string(&t->type.pointer));
+        break;
+    case TYPE_FUNCTION:
+        strcat(buffer, function_type_to_string(&t->type.function));
+        break;
+    default:
+        strcat(buffer, "UNKNOWN");
+        break;
+    }
+
+    return buffer;
 }
 
 Instruction deserialize_Instruction(FILE *file)
@@ -606,8 +778,8 @@ size_t serialize_SizeofType(const SizeofType *stype, unsigned char *buffer)
     offset += sizeof(char);
 
     // Serialize BasicType enum
-    memcpy(buffer + offset, &(stype->basic_type), sizeof(BasicType));
-    offset += sizeof(BasicType);
+    memcpy(buffer + offset, &(stype->basic_type), sizeof(AtomicType));
+    offset += sizeof(AtomicType);
 
     // Serialize structure_access array
     memcpy(buffer + offset, stype->structure_access.object.struct_type, sizeof(unsigned long long) * 5);
@@ -633,8 +805,8 @@ SizeofType *deserialize_SizeofType(const unsigned char *buffer)
     offset += sizeof(char);
 
     // Deserialize BasicType enum
-    memcpy(&(stype->basic_type), buffer + offset, sizeof(BasicType));
-    offset += sizeof(BasicType);
+    memcpy(&(stype->basic_type), buffer + offset, sizeof(AtomicType));
+    offset += sizeof(AtomicType);
 
     // Deserialize structure_access array
     memcpy(stype->structure_access.object.struct_type, buffer + offset, sizeof(unsigned long long) * 5);
@@ -1039,8 +1211,8 @@ size_t serialize_variable(const Variable *var, unsigned char* buffer)
 
     if (var->vtype == BASIC_TYPE_VARIABLE)
     {
-        memcpy(buffer + offset, &var->data.type, sizeof(BasicType));
-        offset += sizeof(BasicType);
+        memcpy(buffer + offset, &var->data.type, sizeof(AtomicType));
+        offset += sizeof(AtomicType);
     }
     else if (var->vtype == STRUCT_TYPE_VARIABLE)
     {
@@ -1067,7 +1239,7 @@ Variable *deserialize_variable(FILE *f)
 
     if (var->vtype == BASIC_TYPE_VARIABLE)
     {
-        fread(&var->data.type, sizeof(BasicType), 1, f);
+        fread(&var->data.type, sizeof(AtomicType), 1, f);
     }
     else if (var->vtype == STRUCT_TYPE_VARIABLE)
     {
@@ -1174,7 +1346,7 @@ Function *deserialize_function(Project *p, ull offset)
     return fun;
 }
 
-int get_basic_type_size(BasicType type)
+int get_basic_type_size(AtomicType type)
 {
     switch (type)
     {
@@ -1457,6 +1629,27 @@ void interpret_Instruction(Project *p, Instruction *instr)
         break;
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #define STACK_SIZE 1024
 
