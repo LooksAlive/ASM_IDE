@@ -21,8 +21,10 @@ void add_free_space_range(Project *p, const Range range)
 void init_project(Project *proj, const char *project_name)
 {
     proj->file_size = 2 << 15;
-    proj->main_function.object.offset = 0;
-    proj->main_function.type = OBJ_OFFSET;
+    Object o;
+    o.type = OBJ_OFFSET;
+    o.object.offset = 0;
+    project_add_opened_object(proj, o);
     proj->files_paths = NULL;
     proj->files_paths_size = 1;
     proj->free_space_file = NULL;
@@ -139,7 +141,12 @@ void serialize_project(Project *proj, const char *filename)
     fwrite(proj->project_directory, sizeof(char) * len, len, file);
 
     fwrite(&proj->file_size, sizeof(ull), 1, file);
-    fwrite(&proj->main_function.object.offset, sizeof(ull), 1, file);   // TODO: ...
+    if(proj->main_function->type == OBJ_OFFSET) {
+        fwrite(&proj->main_function->object.offset, sizeof(ull), 1, file);
+    } else {
+        // OBJ_FUNCTION
+        fwrite(&proj->main_function->object.function->offset, sizeof(ull), 1, file);
+    }
 
     fwrite(&proj->files_paths_size, sizeof(size_t), 1, file);
     for (size_t i = 0; i < proj->files_paths_size; ++i)
@@ -205,11 +212,10 @@ void deserialize_project(Project *proj, const char *filename)
     fread(proj->project_directory, sizeof(char) * len, len, file);
 
     fread(&proj->file_size, sizeof(ull), 1, file);
-    fread(&proj->main_function.object.offset, sizeof(ull), 1, file);
-    proj->main_function.type = OBJ_OFFSET;
-    if(proj->main_function.object.offset != 0) {
-        proj->main_function.object.function = deserialize_function(proj, proj->main_function.object.offset);
-        proj->main_function.type = OBJ_FUNCTION;
+    fread(&proj->main_function->object.offset, sizeof(ull), 1, file);
+    proj->main_function->type = OBJ_OFFSET;
+    if(proj->main_function->object.offset != 0) {
+        proj->main_function = deserialize_object(proj, proj->main_function->object.offset);
     }
     
     fread(&proj->files_paths_size, sizeof(size_t), 1, file);
@@ -300,18 +306,33 @@ size_t getInstructionSize(const Instruction *instr)
         size += serialize_Node(&((DataMovement_s *)(instr->data))->dest, buffer);
         size += serialize_Node(&((DataMovement_s *)(instr->data))->src, buffer);
         size += sizeof(((DataMovement_s *)(instr->data))->src_bytes_to_move);
+        break;
     
     case RET:
-        size += sizeof(InstructionEnum);    // only instruction, no operands    
+        size += sizeof(InstructionEnum);    // only instruction, no operands
+        break;
 
     case JMP:
         size += serialize_Node(&((Jump_s *)(instr->data))->jump_position, buffer);
+        break;
 
     case CALL:
         size += serialize_Node(&((Call_s *)(instr->data))->dest, buffer);
         // ull offset of function
         size += sizeof(((Call_s *)(instr->data))->function->object.offset);
-        
+        break;
+    case ADD:
+    case SUB:
+    case MUL:
+    case DIV:
+    case MOD:
+        size += 1;
+        break;
+
+    case AND:
+    case OR:
+    case XOR:
+        break;
 
     }
     
@@ -344,14 +365,19 @@ void adjust_addresses(Function *func, ull code_start_offset /* where in function
 {
     ull *to_update[50];
     char num_to_update = 0;
-    //char buffer[256];
-    //size_t isize = serialize_Instruction(&func->instructions[0], buffer);
-    size_t isize = getInstructionSize(&func->instructions[0]);
+    char buffer[256];
+    size_t isize = 0;// = serialize_Instruction(&func->instructions[0], buffer);
+    //size_t isize = getInstructionSize(&func->instructions[0]);
     func->instructions[0].instruction_start_offset = code_start_offset;
 
     for (unsigned int i = 1; i < func->instructions_size; ++i)
     {
         Instruction *instr = &func->instructions[i];
+        isize = serialize_Instruction(&func->instructions[i - 1], buffer);
+        // regular instruction
+        func->instructions[i].instruction_start_offset = func->instructions[i - 1].instruction_start_offset + isize; // getInstructionSize(&func->instructions[i - 1])
+    
+        /*
         if (instr->i_type == JMP)
         {
             // JumpInstruction* jump_instr = (JumpInstruction*)instr->data;
@@ -387,15 +413,18 @@ void adjust_addresses(Function *func, ull code_start_offset /* where in function
         {
             for (int y = 0; y < num_to_update_; y++)
             {
-                func->instructions[i].instruction_start_offset = func->instructions[i - 1].instruction_start_offset + getInstructionSize(&func->instructions[i - 1]);
+                size_t isize = serialize_Instruction(&func->instructions[i - 1], buffer);
+                func->instructions[i].instruction_start_offset = func->instructions[i - 1].instruction_start_offset + isize;
                 *to_update_[y] = func->instructions[i].instruction_start_offset;
             }
         }
         else
         {
+            size_t isize = serialize_Instruction(&func->instructions[i - 1], buffer);
             // regular instruction
-            func->instructions[i].instruction_start_offset = func->instructions[i - 1].instruction_start_offset + getInstructionSize(&func->instructions[i - 1]);
+            func->instructions[i].instruction_start_offset = func->instructions[i - 1].instruction_start_offset + isize; // getInstructionSize(&func->instructions[i - 1])
         }
+        */
     }
 }
 
@@ -404,7 +433,7 @@ size_t get_function_size(Function *func)
 {
     size_t size = 0;
     // sequantially compute attributes sizeof of bytes, include arrays
-    size += sizeof(func->obj_type);
+    size += sizeof(OBJ_FUNCTION);
     size += sizeof(func->offset);
     size += sizeof(func->visibility);
     size += strlen(func->name) + 1;
@@ -456,8 +485,10 @@ void insert_instruction(Function *func, const Instruction instr, unsigned int in
         exit(EXIT_FAILURE);
     }
 
-    memmove(&func->instructions[index + 1], &func->instructions[index],
-            (func->instructions_size - index - 1) * sizeof(Instruction));
+    for (unsigned int i = func->instructions_size - 1; i > index; i--)
+    {
+        func->instructions[i] = func->instructions[i - 1];
+    }
 
     func->instructions[index] = instr;
 
@@ -511,8 +542,47 @@ void remove_instruction(Function *func, unsigned int index)
         exit(EXIT_FAILURE);
     }
 
-    adjust_addresses(func, get_function_instructions_start_offset(func));
+    if(func->instructions_size > 0) {
+        adjust_addresses(func, get_function_instructions_start_offset(func));
+    }
 }
+
+void remove_object(Project* proj, Object *obj) {
+    if (obj == NULL)
+    {
+        return;
+    }
+
+    // Free specific object resources based on type
+    switch (obj->type) {
+        case OBJ_FUNCTION:
+            if (obj->object.function->name != NULL)
+            {
+                free(obj->object.function->name);
+            }
+            if (obj->object.function->parameters != NULL)
+            {
+                free(obj->object.function->parameters);
+            }
+            if (obj->object.function->instructions != NULL)
+            {
+                free(obj->object.function->instructions);
+            }
+            free(obj->object.function);
+            break;
+        // Add cases for other object types as needed
+        // case OBJ_VARIABLE:
+        //     // Free variable-specific resources
+        //     break;
+        // ... other cases ...
+    }
+
+    // Remove from project's opened objects
+    project_remove_opened_object(proj, obj);
+
+    obj = NULL;
+}
+
 
 void init_function(Function *func)
 {
@@ -529,7 +599,7 @@ void init_function(Function *func)
     func->param_count = 0;
     // func->local_variables = NULL;
     // func->local_var_count = 0;
-    func->references.type = OBJ_NONE;
+    //func->references.type = OBJ_NONE;
     func->references_size = 0;
     func->visibility = PUBLIC;
 
@@ -541,9 +611,39 @@ void init_function(Function *func)
     func->instructions_size = 1;
 }
 
-void project_add_opened_object(Project *p, Object *obj) {
+void project_add_opened_object(Project *p, const Object obj) {
     p->opened_objects = realloc(p->opened_objects, (p->opened_objects_size + 1) * sizeof(Object*));
     p->opened_objects[p->opened_objects_size++] = obj;
+}
+
+void project_remove_opened_object(Project *p, const Object *obj)
+{
+    if (p == NULL || obj == NULL || p->opened_objects == NULL)
+    {
+        return (size_t)-1;  // Invalid input or empty array
+    }
+
+    ptrdiff_t diff = obj - p->opened_objects;
+    
+    if (diff < 0 || (size_t)diff >= p->opened_objects_size)
+    {
+        return (size_t)-1;  // Object is not within the array bounds
+    }
+
+
+    for (unsigned int i = diff; i < p->opened_objects_size - 1; ++i) {
+        p->opened_objects[i] = p->opened_objects[i + 1];
+    }
+
+    p->opened_objects_size--;
+
+    p->opened_objects = realloc(p->opened_objects, p->opened_objects_size * sizeof(Object*));
+
+    if (p->opened_objects == NULL && p->opened_objects_size > 0) {
+        fprintf(stderr, "Error: Failed to reallocate memory for opened objects.\n");
+        exit(EXIT_FAILURE);
+    }
+
 }
 
 
@@ -557,9 +657,9 @@ Function *create_function(Project *p, const char *name)
     }
 
     init_function(func);
-    Object* o = malloc(sizeof(Object));
-    o->type = OBJ_FUNCTION;
-    o->object.function = func;
+    Object o;
+    o.type = OBJ_FUNCTION;
+    o.object.function = func;
     project_add_opened_object(p, o);
 
     func->name = strdup(name);
@@ -619,11 +719,56 @@ size_t serialize_Instruction(const Instruction *instr, unsigned char *buffer)
         DataMovement_s *mov_data = (DataMovement_s *)(instr->data);
         size += serialize_Node(&mov_data->dest, buffer);
         size += serialize_Node(&mov_data->src, buffer);
-        size += sizeof(mov_data->src_bytes_to_move);
+        // add size to buffer
+        size += serialize_Node(&mov_data->src_bytes_to_move, buffer);
         break;
     }
     case RET:
-        size += sizeof(InstructionEnum);    // only instruction, no operands    
+        size += sizeof(InstructionEnum);    // only instruction, no operands
+        break;
+
+    case JMP:
+        size += serialize_Node(&((Jump_s *)(instr->data))->jump_position, buffer);
+        break;
+
+    case CALL:
+        size += serialize_Node(&((Call_s *)(instr->data))->dest, buffer);
+        // ull offset of function
+        size += sizeof(((Call_s *)(instr->data))->function->object.offset);
+        break;
+    case ADD:
+    case SUB:
+    case MUL:
+    case DIV:
+    case MOD:
+        {
+            Arithmetic_s* arith_data = (Arithmetic_s*)(instr->data);
+            size += serialize_Node(&arith_data->dest, buffer);
+            // src_size
+            for (unsigned int i = 0; i < arith_data->src_size; ++i) {
+                size += serialize_Node(&arith_data->src[i], buffer);
+            }
+        }
+        break;
+
+    case AND:
+    case OR:
+    case XOR:
+        {
+            Logical_s* logical_data = (Logical_s*)(instr->data);
+            size += serialize_Node(&logical_data->dest, buffer);
+            size += serialize_Node(&logical_data->src, buffer);
+        }
+        break;
+    case CMP:
+        {/*
+            Comparison_s* comp_data = (Comparison_s*)(instr->data);
+            size += serialize_Node(&comp_data->dest, buffer);
+            size += serialize_Node(&comp_data->src, buffer);
+
+        */}
+       break;
+
     default:
         fprintf(stderr, "Unsupported InstructionEnum type: %d\n", instr->i_type);
         return 0; // Return 0 to indicate failure
@@ -1184,8 +1329,8 @@ StructType *deserialize_struct_type(FILE *f)
     st->fields = malloc(st->field_count * sizeof(Variable));
     for (unsigned int i = 0; i < st->field_count; i++)
     {
-        st->fields[i].type = OBJ_VARIABLE;
-        st->fields[i].object.variable = deserialize_variable(f);
+        //st->fields[i].type = OBJ_VARIABLE;
+        //st->fields[i].object.variable = deserialize_variable(f);
     }
 
     return st;
@@ -1249,61 +1394,58 @@ Variable *deserialize_variable(FILE *f)
     return var;
 }
 
-void serialize_function(Project *p, Function *fun, const char *file_path)
+size_t serialize_function(Function *fun, unsigned char* buffer)
 {
-    // char* function_file = p->files_paths[0]; // Assuming single file for simplicity
-    FILE *f = fopen(file_path, "r+b");
+    size_t offset = 0;
 
-    if (!f)
-    {
-        perror("Failed to open file");
-        return;
-    }
+    memcpy(buffer + offset, (void*)OBJ_FUNCTION, sizeof(ObjectEnum));
+    offset += sizeof(ObjectEnum);
 
-    fseek(f, fun->offset, SEEK_SET);
+    memcpy(buffer + offset, &fun->offset, sizeof(ull));
+    offset += sizeof(ull);
 
-    fwrite(&fun->obj_type, sizeof(ObjectEnum), 1, f);
-    fwrite(&fun->offset, sizeof(ull), 1, f);
-    fwrite(&fun->parent, sizeof(ull), 1, f);
-    fwrite(&fun->visibility, sizeof(ObjectVisibility), 1, f);
+    memcpy(buffer + offset, &fun->parent, sizeof(ull));
+    offset += sizeof(ull);
+
+    memcpy(buffer + offset, &fun->visibility, sizeof(ObjectVisibility));
+    offset += sizeof(ObjectVisibility);
 
     size_t name_len = strlen(fun->name);
-    fwrite(&name_len, sizeof(size_t), 1, f);
-    fwrite(fun->name, sizeof(char), name_len, f);
+    memcpy(buffer + offset, &name_len, sizeof(size_t));
+    offset += sizeof(size_t);
 
-    fwrite(&fun->param_count, sizeof(unsigned int), 1, f);
+    memcpy(buffer + offset, fun->name, name_len);
+    offset += name_len;
+
+    memcpy(buffer + offset, &fun->param_count, sizeof(unsigned int));
+    offset += sizeof(unsigned int);
+
     for (unsigned int i = 0; i < fun->param_count; i++) {
-        // only ull is serializable
-        fwrite(&fun->parameters[i].in_out, sizeof(fun->parameters[i].in_out), 1, f);
-        unsigned char* buffer = malloc(sizeof(unsigned char) * 256);
-        size_t size = serialize_variable(fun->parameters[i].variable, buffer);
-        fwrite(buffer, sizeof(unsigned char), size, f);
-    }
-    /*
-    for(unsigned int i = 0; i < fun->param_count; i++) {
-        serialize_variable(f, fun->parameters[i]);
-    }
-    */
+        memcpy(buffer + offset, &fun->parameters[i].in_out, sizeof(fun->parameters[i].in_out));
+        offset += sizeof(fun->parameters[i].in_out);
 
-    fwrite(&fun->instructions_size, sizeof(ull), 1, f);
+        size_t var_size = serialize_variable(fun->parameters[i].variable, buffer + offset);
+        offset += var_size;
+    }
 
-    size_t size = 0;
-    unsigned char *buffer = malloc(sizeof(unsigned char) * 256);
+    memcpy(buffer + offset, &fun->instructions_size, sizeof(ull));
+    offset += sizeof(ull);
+
     for (int i = 0; i < fun->instructions_size; i++)
     {
-        size += serialize_Instruction(&fun->instructions[i], buffer);
-        fwrite(buffer, sizeof(unsigned char), size, f);
+        size_t instr_size = serialize_Instruction(&fun->instructions[i], buffer + offset);
+        offset += instr_size;
     }
 
-    fwrite(&fun->references_size, sizeof(ull), 1, f);
-    // fwrite(fun->references, sizeof(ull), fun->references_size, f);
+    memcpy(buffer + offset, &fun->references_size, sizeof(ull));
+    offset += sizeof(ull);
 
-    fclose(f);
+    return offset;
 }
 
-Function *deserialize_function(Project *p, ull offset)
+Function *deserialize_function(FILE *f)
 {
-    Function *fun = malloc(sizeof(Function));
+    /*
     char *function_file = p->files_paths[0]; // Assuming single file for simplicity
     FILE *f = fopen(function_file, "rb");
 
@@ -1315,8 +1457,8 @@ Function *deserialize_function(Project *p, ull offset)
     }
 
     fseek(f, offset, SEEK_SET);
-
-    fread(&fun->obj_type, sizeof(ObjectEnum), 1, f);
+    */
+    Function *fun = malloc(sizeof(Function));
     fread(&fun->offset, sizeof(ull), 1, f);
     fread(&fun->parent, sizeof(ull), 1, f);
     fread(&fun->visibility, sizeof(ObjectVisibility), 1, f);
@@ -1346,6 +1488,99 @@ Function *deserialize_function(Project *p, ull offset)
     return fun;
 }
 
+void serialize_object(Project *p, Object *obj)
+{
+    FILE* f;
+    fwrite(&obj->type, sizeof(ObjectEnum), 1, f);
+
+    switch (obj->type)
+    {
+    case OBJ_FUNCTION:
+        {
+            Function *fun = (Function *)obj;
+            fwrite(&fun->offset, sizeof(ull), 1, f);
+            fwrite(&fun->parent, sizeof(ull), 1, f);
+            fwrite(&fun->visibility, sizeof(ObjectVisibility), 1, f);
+
+            size_t name_len = strlen(fun->name);
+            fwrite(&name_len, sizeof(size_t), 1, f);
+            fwrite(fun->name, sizeof(char), name_len, f);
+
+            fwrite(&fun->param_count, sizeof(unsigned int), 1, f);
+            fwrite(fun->parameters, sizeof(Variable), fun->param_count, f);
+
+            fwrite(&fun->instructions_size, sizeof(unsigned int), 1, f);
+            for (int i = 0; i < fun->instructions_size; i++)
+            {
+                //serialize_Instruction(fun->instructions[i], f);
+            }
+
+            fwrite(&fun->references_size, sizeof(ull), 1, f);
+            // fwrite(fun->references, sizeof(ull), fun->references_size, f);
+        }
+        break;
+    // Add cases for other object types here
+    default:
+        fprintf(stderr, "Unknown object type for serialization\n");
+        break;
+    }
+}
+
+Object *deserialize_object(Project *p, ull offset)
+{
+    Object o;
+    o.changed = false;
+    char *function_file = p->files_paths[0]; // Assuming single file for simplicity
+    FILE *f = fopen(function_file, "rb");
+    if (!f)
+    {
+        perror("Failed to open file");
+        return NULL;
+    }
+    //open("function_file", "rb");
+    fseek(f, offset, SEEK_SET);
+    fread(&o.type, sizeof(ObjectEnum), 1, f);
+
+    switch (o.type)
+    {
+    case OBJ_FUNCTION:
+        {
+            o.object.function = deserialize_function(f);
+        }
+        break;
+    case OBJ_VARIABLE:
+        {
+            o.object.variable = deserialize_variable(f);
+        }
+        break;
+    case OBJ_STRUCT:
+        {
+            o.object.struct_type = deserialize_struct_type(f);
+        }
+        break;
+    case OBJ_ENUM:
+        {
+            //deserialize_enum(p, offset);
+        }
+        break; 
+    case OBJ_MODULE:
+        {
+            //deserialize_module(p, offset);
+        }
+        break;
+    case OBJ_OFFSET:
+        {
+            //deserialize_offset(p, offset);
+        }
+        break;
+    // Add cases for other object types here
+    default:
+        fprintf(stderr, "Unknown object type for deserialization\n");
+        return NULL;
+    }
+}
+
+
 int get_basic_type_size(AtomicType type)
 {
     switch (type)
@@ -1373,8 +1608,9 @@ int get_structure_sizeof_recursive(Project *p, StructType *st, ull offset_to_sto
     int size = 0;
     for (size_t i = 0; i < st->field_count; ++i)
     {
-        size += get_basic_type_size(st->fields[i].type);
-        if (st->fields[i].type == BASIC_TYPE_STRUCT)
+        
+        size += get_basic_type_size(st->fields[i]->type);
+        if (st->fields[i]->type == BASIC_TYPE_STRUCT)
         {
             if (offset_to_stop_at == 0)
             {

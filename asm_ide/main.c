@@ -616,7 +616,7 @@ void display_project_info()
     mvwprintw(main_win, line++, 2, "Opened functions:");
     for (int i = 0; i < p.opened_objects_size; i++)
     {
-        mvwprintw(main_win, line++, 4, "%s", p.opened_objects[i]->object.function->name);
+        mvwprintw(main_win, line++, 4, "%s", p.opened_objects[i].object.function->name);
     }
     mvwprintw(main_win, line++, 2, "Free space file: %s", p.free_space_file);
     mvwprintw(main_win, line++, 2, "Project directory: %s", p.project_directory);
@@ -798,6 +798,13 @@ show_function:
                         show_function_info(current_function);
                         return;
                     }
+                    else {
+                        if(p.main_function.type == OBJ_FUNCTION) {
+                            show_function_info(p.main_function.object.function);
+                            current_function = p.main_function.object.function;
+                        }
+                    }
+                    break;
                 }
                 if (strcmp(token, kw_main) == 0) {
                     // Handle "show function main" keyword
@@ -817,7 +824,8 @@ show_function:
                     ull offset;
                     // from token convert ull string to number
                     offset = strtoull(token, NULL, 16);
-                    Function* fun = deserialize_function(&p, offset);
+                    Object* obj = deserialize_object(&p, offset);
+                    Function* fun = obj->object.function;
                     show_function_info(fun);
                 }
             }
@@ -855,27 +863,24 @@ edit_function:
                 // Handle "delete function" keyword
                 token = strtok(NULL, " \n\0");
                 if (strcmp(token, kw_main) == 0) {
-                    // Handle "delete function main" keyword
-                    if(p.main_function.object.function == NULL) {
-                        wclear(main_win);
-                    }
+                    remove_object(&p, &p.main_function);    // FIXME: ...
+                    p.main_function.object.offset = 0;
+                    wclear(main_win);
                 }
                 else {
-                    mvwprintw(main_win, 1, 1, "NOT IMPLEMENTED.");
-                    return;
                     // get function ull offset, read it and display
                     ull offset;
                     // from token convert ull string to number
                     offset = strtoull(token, NULL, 16);
-                    Function* fun = deserialize_function(&p, offset);
+                    Object* obj = deserialize_object(&p, offset);
+                    Function* fun = obj->object.function;
                     if(fun == NULL) {
                         wclear(main_win);
                         mvwprintw(main_win, 1, 1, "Function not found.");
                         wrefresh(main_win);
                     }
                     else {
-                        // delete function
-                        //delete_function(fun);
+                        remove_object(&p, obj);
                     }
                 }
             }
@@ -902,7 +907,6 @@ void analyze_command(char *command) {
             token = strtok(NULL, " \n");
             free(current_function->name);
             current_function->name = strdup(token);
-            show_function_info(current_function);
         }  else if (strcmp(token, "visibility") == 0) {
             token = strtok(NULL, " \n\0");
             if (strcmp(token, "PRIVATE") == 0) {
@@ -932,6 +936,7 @@ void analyze_command(char *command) {
     }
     else if (strcmp(token, "ei") == 0) {
         set_mode(MODE_INSTRUCTION_EDIT, true);
+        return;
     }
     // edit instructions
     else if (strcmp(token, "edit") == 0) {
@@ -939,11 +944,14 @@ void analyze_command(char *command) {
         if (strcmp(token, "instructions") == 0) {
             token = strtok(NULL, " \n");
             set_mode(MODE_INSTRUCTION_EDIT, true);
+            return;
         }
     }
     else {
         //mvwprintw(main_win, 1, 1, "Invalid command.");
     }
+
+    show_function_info(current_function);
 }
 
 
@@ -1236,7 +1244,7 @@ void analyze_instruction_command(char *command) {
         return;
     }
 
-    if (strcmp(token, "insert") == 0) {
+    if (strcmp(token, "insert") == 0 || strcmp(token, "i") == 0) {
         token = strtok(NULL, " \n");
         if (token == NULL) return;
         ull offset = strtoull(token, NULL, 10);

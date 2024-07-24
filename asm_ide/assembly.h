@@ -323,7 +323,7 @@ typedef enum SSEInstructions {
 */
 
 
-typedef enum InstructionEnum {
+typedef enum __attribute__((packed)) InstructionEnum {
     NONE,
     SYSCALL,// system call: SYSCALL 15  --> constant --> any number represents standard system call,
     LABEL,  // label: LABEL label
@@ -485,7 +485,7 @@ size_t serialize_Instruction(const Instruction* instr, unsigned char* buffer);
 
 
 
-typedef enum ObjectEnum {
+typedef enum __attribute__((packed)) ObjectEnum {
     OBJ_NONE,
     OBJ_OFFSET,
     OBJ_FUNCTION,
@@ -509,9 +509,10 @@ typedef struct Object {
         //String* string;
         //Array* array;
     } object;
+    bool changed;
 } Object;
 
-typedef enum AtomicType {
+typedef enum __attribute__((packed)) AtomicType {
     BASIC_TYPE_INT,
     BASIC_TYPE_VOID,
     BASIC_TYPE_FLOAT,
@@ -530,7 +531,7 @@ typedef enum AtomicType {
 
 char* atomic_type_to_string(AtomicType at);
 
-typedef enum TypeEnum {
+typedef enum __attribute__((packed)) TypeEnum {
     TYPE_NONE,
     TYPE_POINTER,
     TYPE_ARRAY,
@@ -556,7 +557,6 @@ typedef struct ArrayType {
 char* array_type_to_string(ArrayType* at);
 
 typedef struct FunctionType {
-    ObjectEnum obj_type;
     Object object;
     struct Type* return_type;
     struct Type* parameters;
@@ -590,63 +590,57 @@ typedef struct local_register {
 
 // module type, similar to class but only encapsulates objects
 typedef struct Module {
-    ObjectEnum obj_type;
     ull offset; // actual offset on disk
     Object parent;
     char* name;
     Object* fields; // mostly Variable*  TODO: * or **
     size_t fields_size;
 
-    bool changed;   // if we need to serialize or not.
 } Module;
 
 
 // Define a structure to represent a struct type
 typedef struct StructType {
-    ObjectEnum obj_type;
     bool is_union;
     ull offset; // actual offset on disk
-    Object parent;
+    Object* parent;
     char* name;
-    Object* fields; // mostly Variable*  TODO: * or **
+    Object** fields; // mostly Variable*  TODO: * or **
     size_t fields_size;
     size_t struct_byte_size; // Total size of the struct
     unsigned int field_count;
 
     // references ull to child offsets variables
-    Object* references_children;
+    Object** references_children;
     size_t references_children_size;
 
     // other objects connected to this struct/class
-    Object* references_objects;
+    Object** references_objects;
     size_t references_objects_size;
 
     // references ull to child offsets to structs/classes that this one inherits from
-    Object* references_parents;
+    Object** references_parents;
     size_t references_parents_size;
 
     // references ull to child offsets to structs/classes that this inherits this one
-    Object* references_children_parents;
+    Object** references_children_parents;
     size_t references_children_parents_size;
 
-    bool changed;   // if we need to serialize or not.
 } StructType;
 
 // structure that will represent enum
 typedef struct EnumType {
-    ObjectEnum obj_type;
     ull offset; // actual offset on disk
-    Object parent;
+    Object* parent;
     char* name;
     Object* values; // Variable*  TODO: * or **
     size_t values_size;
     size_t enum_byte_size; // Total size of the enum
 
     // references ull to child offsets variables
-    Object* references_children;
+    Object** references_children;
     size_t references_size;
 
-    bool changed;   // if we need to serialize or not.
 } EnumType;
 
 
@@ -666,7 +660,7 @@ typedef union VariableValue {
     void* struct_val; // Pointer to struct data
 } VariableValue;
 
-typedef enum ObjectVisibility {
+typedef enum __attribute__((packed)) ObjectVisibility {
     PRIVATE,
     PUBLIC,     // by default
     PROTECTED,
@@ -675,9 +669,8 @@ typedef enum ObjectVisibility {
 
 // global variable
 typedef struct Variable {
-    ObjectEnum obj_type;
     ull offset; // actual offset on disk
-    Object parent;
+    Object* parent;
     char* name;
     char is_constant;
     //VariableValue value;
@@ -694,14 +687,13 @@ typedef struct Variable {
     VariableValue value;
 
     // relations to other object they work with, just this abstraction
-    Object* relations;
+    Object** relations;
     size_t relations_size;
 
     // references ull to child offsets variables
-    Object* references;
+    Object** references;
     size_t references_size;
 
-    bool changed;   // if we need to serialize or not.
 } Variable;
 
 // local variable on stack.
@@ -715,21 +707,15 @@ typedef struct LocalVariable {
     VariableValue value;
 } LocalVariable;
 
-LocalVariable* get_lvar_from_name(struct Project* p, char* name);
-
-
-
 typedef struct Parameter {
-    Variable* variable; // this is not Object because it will always be resolved as variables, not using ull offset here, never.
+    Object* variable; // this is not Object because it will always be resolved as variables, not using ull offset here, never.
     char in_out;    // if 0 -> in, if 1 -> out
 } Parameter;
 
-
 // Define a structure to represent a function
 typedef struct Function {
-    ObjectEnum obj_type;
     ull offset; // actual offset on disk, start of a function def.
-    Object parent; // module or class
+    Object* parent; // module or class
     ObjectVisibility visibility;
     char* name; // ends with \0
     Parameter* parameters; // Variable*  TODO: * or **
@@ -737,10 +723,9 @@ typedef struct Function {
     Instruction* instructions;
     ull instructions_size;
 
-    Object  references;     // to calls, usages
+    Object**  references;     // to calls, usages
     ull     references_size;
 
-    bool changed;   // if we need to serialize or not.
 } Function;
 
 void append_instruction(Function* func, const Instruction instr);
@@ -762,7 +747,7 @@ typedef struct SizeofType {
 // push, pop  --> only optional not used very often
 //ull* stack_basic;
 //ull stack_size_basic;
-typedef enum NodeType {
+typedef enum __attribute__((packed)) NodeType {
     L_REG,
     C_VAR,
     TYPE,
@@ -867,14 +852,14 @@ typedef struct Range {
 typedef struct Project {
     ull file_size;
 
-    Object main_function;
+    Object* main_function;
 
     char** files_paths;      // all data in binary
     size_t files_paths_size;
 
     ull last_offset;    // offset at which we should append next data.
 
-    Object** opened_objects;
+    Object* opened_objects;     // contains all objects that are opened in this project, so we can easily find them. referencing them all around with pointers
     size_t opened_objects_size;
 
     Object** top_level_objects; // objects that belongs to this project, mostly modules, structs --> they have associated other objects, building tree structure
@@ -890,9 +875,10 @@ typedef struct Project {
 
 } Project;
 
+void remove_object(Project* proj, Object *obj);
 
-
-
+void project_add_opened_object(Project *p, const Object obj);
+void project_remove_opened_object(Project *p, const Object *obj);
 
 void init_project(Project* proj, const char* project_name);
 void clean_project(Project* proj);
@@ -904,8 +890,8 @@ void deserialize_project(Project* proj, const char* filename);
 void memory_read(stack* s, size_t src, void* buffer, size_t size);
 void memory_write(stack* s, size_t dest, void* src, size_t size);
 
-Function* deserialize_function(Project *p, ull offset);
-void serialize_function(Project *p, Function* fun, const char* file_path);
+Function *deserialize_function(FILE *f);
+size_t serialize_function(Function *fun, unsigned char* buffer);
 // function which take FILE* f suppose that position on disk is set to correct position/offset
 size_t serialize_variable(const Variable *var, unsigned char* buffer);
 Variable* deserialize_variable(FILE *f);
@@ -917,12 +903,14 @@ Node deserialize_Node(FILE* file);
 void interpret_Instruction(Project *p, Instruction* instr);
 
 
+void project_remove_opened_object(Project *p, const Object* obj);
+void project_add_opened_object(Project *p, const Object obj);
 
-
-
-
+LocalVariable* get_lvar_from_name(Project* p, char* name);
 
 Function* create_function(Project* p, const char* name);
 
+Object *deserialize_object(Project *p, ull offset);
+void serialize_object(Project *p, Object *obj);
 
 #endif // ASSEMBLY_H
